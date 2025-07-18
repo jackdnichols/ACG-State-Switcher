@@ -19,7 +19,7 @@ document.getElementById('applyBtn').addEventListener('click', async () => {
   }
 
   const message = document.createElement('div');
-  message.textContent = `Cookies for ${state} applied! Reloading the page...`;
+  message.textContent = `Changing State to ${state}...`;
   message.className = 'success-message';
 
   const existing = document.querySelector('.success-message');
@@ -34,5 +34,5 @@ document.getElementById('applyBtn').addEventListener('click', async () => {
       }
     });
     window.close();
-  }, 1000);
+  }, 2000);
 });
