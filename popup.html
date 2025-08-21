@@ -39,17 +39,40 @@
     button:hover {
       background-color: #005a9e;
     }
+    .link-group {
+      margin-top: 20px;
+      border-top: 1px solid #eee;
+      padding-top: 15px;
+      display: grid;
+      grid-template-columns: 1fr 1fr; /* Creates two equal-width columns */
+      grid-gap: 20px; /* Adds space between columns */
+    }
+    .link-group h4 {
+      margin: 0 0 10px 0;
+      color: #555;
+      grid-column: span 2; /* Makes headings span across both columns */
+    }
+    .link-group a {
+      text-decoration: none;
+      color: #0078D4;
+      display: block;
+      padding: 5px 0;
+      transition: color 0.3s ease;
+    }
+    .link-group a:hover {
+      color: #005a9e;
+    }
   </style>
 </head>
 <body>
-  <h3>Select an ACG State</h3>  
+  <h3>Select a State</h3>
   <select id="stateSelect">
     <option value="Colorado">Colorado</option>
     <option value="Florida">Florida</option>
     <option value="Georgia">Georgia</option>
     <option value="Illinois">Illinois</option>
-	<option value="Indiana">Indiana</option>
-	<option value="Iowa">Iowa</option>
+    <option value="Indiana">Indiana</option>
+    <option value="Iowa">Iowa</option>
     <option value="Michigan">Michigan</option>
     <option value="Minnesota">Minnesota</option>
     <option value="Nebraska">Nebraska</option>
@@ -60,8 +83,26 @@
     <option value="Tennessee">Tennessee</option>
     <option value="Wisconsin">Wisconsin</option>
   </select>
-  <button id="applyBtn">Continue</button>  
-  <div class="disclaimer">Not affiliated with AAA or its subsidiaries.</div>
+  <button id="applyBtn">Continue</button>
+
+  <div class="link-group">
+    <div>
+      <h4>ACG Links</h4>
+      <a href="#" id="productionLink">Production</a>
+      <a href="#" id="stage1Link">Stage 1</a>
+      <a href="#" id="qa1Link">QA 1</a>
+      <a href="#" id="devLink">Dev</a>
+    </div>
+    <div>
+      <h4>Author Links</h4>
+      <a href="#" id="productionAuthorLink">Production</a>
+      <a href="#" id="stage1AuthorLink">Stage 1</a>
+      <a href="#" id="qa1AuthorLink">QA 1</a>
+      <a href="#" id="devAuthorLink">Dev 1</a>
+    </div>
+  </div>
+
+  <div class="disclaimer">Not affiliated with AAA or its subsidiaries.<br/>Author: Jack Nichols</div>
   <script src="popup.js"></script>
 </body>
 </html>

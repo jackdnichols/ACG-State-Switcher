@@ -1,14 +1,16 @@
 {
   "manifest_version": 3,
   "name": "State Switcher for acg.aaa.com",
-  "version": "1.3",
-  "description": "Quickly switch cookies for acg.aaa.com to different states.",
+  "version": "1.4",
+  "description": "A browser extension that simplifies managing and switching cookie states for a variety of web domains. It provides a quick way to change profiles, making it easy to test different user scenarios.",
   "permissions": [
     "cookies",
     "activeTab"
   ],
   "host_permissions": [
-    "https://acg.aaa.com/*"
+    "https://acg.aaa.com/*",
+    "https://*.acg.aaa.com/*",
+    "https://*.adobeaemcloud.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -20,5 +22,28 @@
   },
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.acg.aaa.com/*",
+        "https://acg.aaa.com/*",
+        "https://www.stage1.acg.aaa.com/*",
+        "https://stage1.acg.aaa.com/*",
+        "https://www.qa1.acg.aaa.com/*",
+        "https://qa1.acg.aaa.com/*",        
+        "https://www.dev1.acg.aaa.com/*",
+        "https://dev1.acg.aaa.com/*",
+        "https://www.dev.acg.aaa.com/*",
+        "https://dev.acg.aaa.com/*",
+        "https://author-p149839-e1583596.adobeaemcloud.com/*",
+        "https://author-p149839-e1583546.adobeaemcloud.com/*",        
+        "https://author-p149839-e1583595.adobeaemcloud.com/*",
+        "https://author-p149839-e1544194.adobeaemcloud.com/*"
+      ],
+      "js": [
+        "content-script.js"
+      ]
+    }
+  ]
 }
