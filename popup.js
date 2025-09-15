@@ -67,7 +67,7 @@ const urls = {
     production: "https://www.meemic.com",
     stage1:     "https://stage1.meemic.com",
     qa1:        "https://qa1.meemic.com",
-    dev1:       "https://dev.meemic.com" // dev (not dev1)
+    dev1:       "https://dev1.meemic.com" 
   },
   meemicfoundation: {
     production: "https://www.meemicfoundation.org",
