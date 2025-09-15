@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "State Switcher for acg.aaa.com",
-  "version": "1.4",
-  "description": "A browser extension that simplifies managing and switching cookie states for a variety of web domains. It provides a quick way to change profiles, making it easy to test different user scenarios.",
+  "version": "1.5",
+  "description": "Easily manage and switch cookie states to test different user scenarios across websites.",
   "permissions": [
     "cookies",
     "activeTab"

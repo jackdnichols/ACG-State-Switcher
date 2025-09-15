@@ -1,67 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>ACG State Switcher</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 15px;
-      width: 250px;
+    :root { color-scheme: light dark; }
+    body { font-family: Arial, sans-serif; padding: 15px; width: 260px; margin: 0; }
+    h3 { margin: 0 0 8px; font-size: 16px; }
+    select, button { width: 100%; padding: 8px; margin-top: 10px; }
+    button { background-color: #0078D4; color: #fff; border: none; cursor: pointer; border-radius: 6px; }
+    button:hover { background-color: #005a9e; }
+
+    .section { margin-top: 16px; }
+    .section h4 { margin: 12px 0 6px; color: #fff; font-weight: 600; font-size: 14px; }
+
+    .link-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .link-row a {
+      text-decoration: none; color: #0078D4;
+      padding: 4px 6px; border-radius: 6px; border: 1px solid transparent; line-height: 1.2;
     }
-    select, button {
-      width: 100%;
-      padding: 8px;
-      margin-top: 10px;
+    .link-row a:hover { color: #005a9e; }
+    .link-row a.active { font-weight: 700; border-color: #cbd5e1; background: #f1f5f9; }
+    .link-row a.disabled {
+      color: #9aa3ae !important; pointer-events: none; cursor: not-allowed; opacity: 0.6;
+      border-color: transparent; text-decoration: none;
     }
-    .disclaimer {
-      font-size: 10px;
-      color: gray;
-      margin-top: 15px;
-      text-align: center;
-    }
+
     .success-message {
-      margin-top: 15px;
-      padding: 10px;
-      background-color: #e6ffed;
-      border: 1px solid #b2f2bb;
-      color: #2e7d32;
-      border-radius: 6px;
-      font-size: 14px;
-      text-align: center;
+      margin-top: 15px; padding: 10px; background-color: #e6ffed; border: 1px solid #b2f2bb;
+      color: #2e7d32; border-radius: 6px; font-size: 14px; text-align: center;
     }
-    button {
-      background-color: #0078D4;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #005a9e;
-    }
-    .link-group {
-      margin-top: 20px;
-      border-top: 1px solid #eee;
-      padding-top: 15px;
-      display: grid;
-      grid-template-columns: 1fr 1fr; /* Creates two equal-width columns */
-      grid-gap: 20px; /* Adds space between columns */
-    }
-    .link-group h4 {
-      margin: 0 0 10px 0;
-      color: #555;
-      grid-column: span 2; /* Makes headings span across both columns */
-    }
-    .link-group a {
-      text-decoration: none;
-      color: #0078D4;
-      display: block;
-      padding: 5px 0;
-      transition: color 0.3s ease;
-    }
-    .link-group a:hover {
-      color: #005a9e;
-    }
+
+    .hint { font-size: 12px; color: #6b7280; margin-top: 6px; }
+    .disclaimer { font-size: 10px; color: gray; margin-top: 15px; text-align: center; }
   </style>
 </head>
 <body>
@@ -85,24 +57,50 @@
   </select>
   <button id="applyBtn">Continue</button>
 
-  <div class="link-group">
-    <div>
-      <h4>ACG Links</h4>
-      <a href="#" id="productionLink">Production</a>
-      <a href="#" id="stage1Link">Stage 1</a>
-      <a href="#" id="qa1Link">QA 1</a>
-      <a href="#" id="devLink">Dev</a>
+  <!-- Environment -->
+  <div class="section">
+    <h4>Environment</h4>
+    <div class="link-row" id="envRow">
+      <a href="#" data-env="production">Production</a>
+      <a href="#" data-env="stage1">Stage 1</a>
+      <a href="#" data-env="qa1">QA 1</a>
+      <a href="#" data-env="dev1">Dev 1</a>
     </div>
-    <div>
-      <h4>Author Links</h4>
-      <a href="#" id="productionAuthorLink">Production</a>
-      <a href="#" id="stage1AuthorLink">Stage 1</a>
-      <a href="#" id="qa1AuthorLink">QA 1</a>
-      <a href="#" id="devAuthorLink">Dev 1</a>
+    <div class="hint" id="envHint">Select an environment to enable links.</div>
+  </div>
+
+  <!-- Author (AEM) – single link that follows selected env -->
+  <div class="section">
+    <h4 id="authorHeading">Author (AEM)</h4>
+    <div class="link-row">
+      <a href="#" id="authorLink" class="disabled" aria-disabled="true" tabindex="-1">Open AEM</a>
+    </div>
+  </div>
+  
+  <!-- Websites (Company) -->
+  <div class="section">
+    <h4 id="websitesHeading">Websites</h4>
+    <div class="link-row">
+      <a href="#" data-company="acg" class="disabled" aria-disabled="true" tabindex="-1">ACG/AAA</a>
+      <a href="#" data-company="meemic" class="disabled" aria-disabled="true" tabindex="-1">Meemic</a>
+      <a href="#" data-company="meemicfoundation" class="disabled" aria-disabled="true" tabindex="-1">Meemic Foundation</a>
     </div>
   </div>
 
-  <div class="disclaimer">Not affiliated with AAA or its subsidiaries.<br/>Author: Jack Nichols</div>
+ <!-- Other Tools (always available) -->
+  <div class="section">
+    <h4>Other Tools</h4>
+    <div class="link-row">
+      <a href="https://experience.adobe.com/#/@aaaautoclubsouth/home" target="_blank" rel="noopener">Adobe Experience</a>
+      <a href="https://experienceleague.adobe.com/tools/calculator/testcalculator.html" target="_blank" rel="noopener">Adobe Calculator</a>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    Not affiliated with AAA or its subsidiaries.<br />Author: Jack Nichols
+  </div>
+
+  <!-- Important: keep script at end so DOM elements exist before JS runs -->
   <script src="popup.js"></script>
 </body>
 </html>
