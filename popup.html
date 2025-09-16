@@ -5,35 +5,134 @@
   <title>ACG State Switcher</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: Arial, sans-serif; padding: 15px; width: 260px; margin: 0; }
-    h3 { margin: 0 0 8px; font-size: 16px; }
-    select, button { width: 100%; padding: 8px; margin-top: 10px; }
-    button { background-color: #0078D4; color: #fff; border: none; cursor: pointer; border-radius: 6px; }
-    button:hover { background-color: #005a9e; }
+    :root {
+      /* Light defaults */
+      --bg: #ffffff;
+      --fg: #0f172a;              /* slate-900 */
+      --muted: #475569;           /* slate-600 */
+      --border: #e2e8f0;          /* slate-200 */
+      --card: #ffffff;
+      --link: #0a66c2;            /* similar to #0078D4 but friendlier on light */
+      --link-hover: #084f96;
+      --accent: #0a66c2;
+      --disabled: #9aa3ae;
+
+      --success-bg: #e6ffed;
+      --success-border: #b2f2bb;
+      --success-fg: #2e7d32;
+      --chip-bg: #f1f5f9;         /* slate-100 */
+      --chip-border: #cbd5e1;     /* slate-300 */
+      --button-bg: #0078D4;
+      --button-bg-hover: #005a9e;
+      --button-fg: #ffffff;
+
+      color-scheme: light dark;
+    }
+
+    /* Auto dark mode */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1220;            /* deep slate */
+        --fg: #e5e7eb;            /* slate-200 */
+        --muted: #9ca3af;         /* slate-400 */
+        --border: #1f2937;        /* slate-800 */
+        --card: #0f172a;          /* slate-900 */
+        --link: #60a5fa;          /* blue-400 */
+        --link-hover: #93c5fd;    /* blue-300 */
+        --accent: #60a5fa;
+        --disabled: #64748b;      /* slate-500 */
+
+        --success-bg: #0f2b18;
+        --success-border: #165f31;
+        --success-fg: #86efac;    /* green-300 */
+        --chip-bg: #111827;       /* gray-900 */
+        --chip-border: #374151;   /* gray-700 */
+        --button-bg: #2563eb;     /* blue-600 */
+        --button-bg-hover: #1d4ed8; /* blue-700 */
+        --button-fg: #e5e7eb;     /* slate-200 */
+      }
+    }
+
+    /* Optional manual override: add data-theme="light" or "dark" on <html> */
+    html[data-theme="light"] :root { color-scheme: light; }
+    html[data-theme="dark"]  :root { color-scheme: dark; }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: Arial, sans-serif;
+      padding: 15px;
+      width: 260px;
+      margin: 0;
+    }
+
+    h3 { margin: 0 0 8px; font-size: 16px; color: var(--fg); }
+
+    select, button {
+      width: 100%;
+      padding: 8px;
+      margin-top: 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--fg);
+      outline: none;
+    }
+
+    button {
+      background-color: var(--button-bg);
+      color: var(--button-fg);
+      border: none;
+      cursor: pointer;
+    }
+    button:hover { background-color: var(--button-bg-hover); }
 
     .section { margin-top: 16px; }
-    .section h4 { margin: 12px 0 6px; color: #fff; font-weight: 600; font-size: 14px; }
+    .section h4 {
+      margin: 12px 0 6px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 14px;
+    }
 
     .link-row { display: flex; gap: 8px; flex-wrap: wrap; }
     .link-row a {
-      text-decoration: none; color: #0078D4;
-      padding: 4px 6px; border-radius: 6px; border: 1px solid transparent; line-height: 1.2;
+      text-decoration: none;
+      color: var(--link);
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      line-height: 1.2;
+      background: transparent;
     }
-    .link-row a:hover { color: #005a9e; }
-    .link-row a.active { font-weight: 700; border-color: #cbd5e1; background: #f1f5f9; }
+    .link-row a:hover { color: var(--link-hover); }
+    .link-row a.active {
+      font-weight: 700;
+      border-color: var(--chip-border);
+      background: var(--chip-bg);
+    }
     .link-row a.disabled {
-      color: #9aa3ae !important; pointer-events: none; cursor: not-allowed; opacity: 0.6;
-      border-color: transparent; text-decoration: none;
+      color: var(--disabled) !important;
+      pointer-events: none;
+      cursor: not-allowed;
+      opacity: 0.7;
+      border-color: transparent;
+      text-decoration: none;
     }
 
     .success-message {
-      margin-top: 15px; padding: 10px; background-color: #e6ffed; border: 1px solid #b2f2bb;
-      color: #2e7d32; border-radius: 6px; font-size: 14px; text-align: center;
+      margin-top: 15px;
+      padding: 10px;
+      background-color: var(--success-bg);
+      border: 1px solid var(--success-border);
+      color: var(--success-fg);
+      border-radius: 6px;
+      font-size: 14px;
+      text-align: center;
     }
 
-    .hint { font-size: 12px; color: #6b7280; margin-top: 6px; }
-    .disclaimer { font-size: 10px; color: gray; margin-top: 15px; text-align: center; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .disclaimer { font-size: 10px; color: var(--muted); margin-top: 15px; text-align: center; }
   </style>
 </head>
 <body>
@@ -76,8 +175,8 @@
       <a href="#" id="authorLink" class="disabled" aria-disabled="true" tabindex="-1">Open AEM</a>
     </div>
   </div>
-  
-  <!-- Websites (Company) -->
+
+  <!-- Websites -->
   <div class="section">
     <h4 id="websitesHeading">Websites</h4>
     <div class="link-row">
@@ -87,13 +186,13 @@
     </div>
   </div>
 
- <!-- Other Tools (always available) -->
+  <!-- Other Tools (always available) -->
   <div class="section">
     <h4>Other Tools</h4>
     <div class="link-row">
       <a href="https://experience.adobe.com/#/@aaaautoclubsouth/home" target="_blank" rel="noopener">Adobe Experience</a>
       <a href="https://experienceleague.adobe.com/tools/calculator/testcalculator.html" target="_blank" rel="noopener">Adobe Calculator</a>
-	  <a href="https://tealiumiq.com" target="_blank" rel="noopener">Tealium IQ</a>
+      <a href="https://tealiumiq.com" target="_blank" rel="noopener">Tealium IQ</a>
     </div>
   </div>
 
@@ -101,7 +200,6 @@
     Not affiliated with AAA or its subsidiaries.<br />Author: Jack Nichols
   </div>
 
-  <!-- Important: keep script at end so DOM elements exist before JS runs -->
   <script src="popup.js"></script>
 </body>
 </html>
