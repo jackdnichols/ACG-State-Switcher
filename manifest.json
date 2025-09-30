@@ -1,17 +1,26 @@
 {
   "manifest_version": 3,
   "name": "State Switcher for acg.aaa.com",
-  "version": "1.51",
-  "description": "Easily manage and switch cookie states to test different user scenarios across websites.",
+  "version": "1.60",
+  "description": "Environment quick-links (Author-only badge) + ACG State cookie switcher.",
   "permissions": [
-    "cookies",
-    "activeTab"
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab",
+    "cookies"
   ],
-  "host_permissions": [
-    "https://acg.aaa.com/*",
+  "host_permissions": [    
+    "https://*.aaa.com/*",
     "https://*.acg.aaa.com/*",
-    "https://*.adobeaemcloud.com/*"
+    "https://*.meemic.com/*",
+    "https://*.meemicfoundation.org/*",
+    "https://author-p149839-e1583596.adobeaemcloud.com/*",
+    "https://author-p149839-e1583546.adobeaemcloud.com/*",
+    "https://author-p149839-e1583595.adobeaemcloud.com/*",
+    "https://author-p149839-e1544194.adobeaemcloud.com/*"
   ],
+  "background": { "service_worker": "background.js" },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -20,30 +29,18 @@
       "128": "icons/aaa.png"
     }
   },
-  "background": {
-    "service_worker": "background.js"
-  },
   "content_scripts": [
     {
       "matches": [
-        "https://www.acg.aaa.com/*",
-        "https://acg.aaa.com/*",
-        "https://www.stage1.acg.aaa.com/*",
-        "https://stage1.acg.aaa.com/*",
-        "https://www.qa1.acg.aaa.com/*",
-        "https://qa1.acg.aaa.com/*",        
-        "https://www.dev1.acg.aaa.com/*",
-        "https://dev1.acg.aaa.com/*",
-        "https://www.dev.acg.aaa.com/*",
-        "https://dev.acg.aaa.com/*",
         "https://author-p149839-e1583596.adobeaemcloud.com/*",
-        "https://author-p149839-e1583546.adobeaemcloud.com/*",        
+        "https://author-p149839-e1583546.adobeaemcloud.com/*",
         "https://author-p149839-e1583595.adobeaemcloud.com/*",
         "https://author-p149839-e1544194.adobeaemcloud.com/*"
       ],
-      "js": [
-        "content-script.js"
-      ]
+      "js": ["content-script.js"],
+      "run_at": "document_start",
+      "all_frames": false,
+      "match_about_blank": false
     }
   ]
 }
