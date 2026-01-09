@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "State Switcher for acg.aaa.com",
-  "version": "1.60",
-  "description": "Environment quick-links (Author-only badge) + ACG State cookie switcher.",
+  "version": "1.63",
+  "description": "Environment quick-links (Author-only badge) + ACG State cookie switcher + Target Strategist (quote-focused idea generator).",
   "permissions": [
     "storage",
     "tabs",
@@ -10,7 +10,7 @@
     "activeTab",
     "cookies"
   ],
-  "host_permissions": [    
+  "host_permissions": [
     "https://*.aaa.com/*",
     "https://*.acg.aaa.com/*",
     "https://*.meemic.com/*",
@@ -20,7 +20,9 @@
     "https://author-p149839-e1583595.adobeaemcloud.com/*",
     "https://author-p149839-e1544194.adobeaemcloud.com/*"
   ],
-  "background": { "service_worker": "background.js" },
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -37,7 +39,9 @@
         "https://author-p149839-e1583595.adobeaemcloud.com/*",
         "https://author-p149839-e1544194.adobeaemcloud.com/*"
       ],
-      "js": ["content-script.js"],
+      "js": [
+        "content-script.js"
+      ],
       "run_at": "document_start",
       "all_frames": false,
       "match_about_blank": false

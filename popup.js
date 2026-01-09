@@ -2,6 +2,10 @@
 // ACG State Switcher — popup.js
 // ===============================
 
+// Popup UI storage keys
+const POPUP_TAB_KEY = "popupActiveTab";
+const STRATEGIST_CUSTOM_KEY = "strategistCustomIdeas";
+
 function isAcgAaaHost(urlString) {
 	try {
 		const { hostname } = new URL(urlString);
@@ -35,7 +39,1057 @@ function buildCompatDetails(c){const d={url:targetUrlForCookie(c),name:c.name,va
 function candidateCookiePaths(n){const raw=(n||"").trim();const ns=raw.replace(/\s+/g,"");const low=raw.toLowerCase();const lns=low.replace(/\s+/g,"");return[`cookies/${raw}.json`,`cookies/${ns}.json`,`cookies/${low}.json`,`cookies/${lns}.json`];}
 async function fetchFirstCookieFile(n){const tried=[];for(const p of candidateCookiePaths(n)){const url=chrome.runtime.getURL(p);tried.push(url);try{const r=await fetch(url);if(r.ok)return{json:await r.json(),path:p};}catch{}}const e=new Error(`No cookie file found for "${n}".`);e.tried=tried;throw e;}
 async function applyCookies(cookies){let ok=0,fail=0;const errors=[];for(const c of cookies){const name=c?.name||"(unnamed)";try{if(!c?.name)throw new Error("Missing name");const val=String(c.value??"");if(val.length>4096)throw new Error("Value exceeds 4096 bytes");let det=buildCompatDetails(c);if(!isAllowedHost(det.url)){const exact=(c.hostOnly&&c.domain)?String(c.domain).replace(/^\./,""):(c.domain?String(c.domain).replace(/^\./,""):"www.acg.aaa.com");det={url:`https://${exact}/`,name:c.name,value:String(c.value??""),path:"/",secure:true,httpOnly:!!c.httpOnly};if(!isAllowedHost(det.url))throw new Error(`not in allowlist (${det.url})`);}await chrome.cookies.set(det);ok++;}catch(e){fail++;errors.push(`${name}: ${e?.message||e}`);}}return{ok,fail,errors};}
-function toast(el,msg,ok=true){if(!el)return;el.className=ok?"success":"success";el.textContent=msg;}
+function toast(el,msg,ok=true){if(!el)return;el.className=`msg ${ok?"ok":"err"}`;el.textContent=msg;}
+
+/* ---------- Tabs (cleaner popup UI) ---------- */
+function setActiveTab(tabName) {
+  const tabs = Array.from(document.querySelectorAll('.tab'));
+  const views = Array.from(document.querySelectorAll('.view'));
+
+  tabs.forEach(t => {
+    const on = t.getAttribute('data-tab') === tabName;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  views.forEach(v => {
+    const on = v.getAttribute('data-view') === tabName;
+    v.classList.toggle('active', on);
+  });
+
+  try { chrome.storage.sync.set({ [POPUP_TAB_KEY]: tabName }); } catch {}
+}
+
+async function initTabs() {
+  const saved = (await chrome.storage.sync.get([POPUP_TAB_KEY]))?.[POPUP_TAB_KEY] || 'state';
+  document.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => setActiveTab(btn.getAttribute('data-tab')));
+  });
+  setActiveTab(saved);
+}
+
+/* ---------- Target Strategist (Adobe AB helper) ---------- */
+const STRATEGIST_ALLOWED_DOMAINS = [
+  "aaa.com",
+  "acg.aaa.com",
+  "meemic.com",
+  "meemicfoundation.org",
+  "adobeaemcloud.com"
+];
+
+let strategistLast = null; // { url, hostname, env, brand, pageName, pathname, h1, ctaText, ctaHref, formCount, hasDD, hasS, hasAlloy, hasAt }
+
+function hostnameFromUrl(urlString) {
+  try { return new URL(urlString).hostname.toLowerCase(); } catch { return ""; }
+}
+
+function isAllowedStrategistUrl(urlString) {
+  const h = hostnameFromUrl(urlString);
+  if (!h) return false;
+  return STRATEGIST_ALLOWED_DOMAINS.some(d => h === d || h.endsWith("." + d));
+}
+
+function detectBrand(hostname) {
+  const h = (hostname || "").toLowerCase();
+  if (h.includes("meemicfoundation")) return "Meemic Foundation";
+  if (h.includes("meemic")) return "Meemic";
+  return "ACG/AAA";
+}
+
+function detectEnv(hostname) {
+  const h = (hostname || "").toLowerCase();
+
+  // Site envs
+  if (h.includes("dev1")) return "Dev1";
+  if (h.includes("qa1")) return "QA1";
+  if (h.includes("stage1")) return "Stage1";
+
+  // AEM author envs (based on your manifest mappings)
+  if (h.includes("author-p149839-e1544194")) return "Dev1 (Author)";
+  if (h.includes("author-p149839-e1583595")) return "QA1 (Author)";
+  if (h.includes("author-p149839-e1583546")) return "Stage1 (Author)";
+  if (h.includes("author-p149839-e1583596")) return "Prod (Author)";
+
+  return "Production";
+}
+
+function setStrategistUi({ pageName, tooltip, showPill, note, suggestion } = {}) {
+  const $name = document.getElementById("strategistPageName");
+  const $pill = document.getElementById("strategistErrorPill");
+  const $note = document.getElementById("strategistNote");
+  const $sWrap = document.getElementById("strategistSuggestion");
+  const $sText = document.getElementById("strategistSuggestionText");
+
+  if ($name && pageName != null) $name.textContent = pageName;
+  if ($pill) {
+    $pill.style.display = showPill ? "inline-flex" : "none";
+    if (tooltip != null) $pill.setAttribute("data-tooltip", tooltip);
+  }
+  if ($note && note != null) $note.textContent = note;
+  if ($sWrap && $sText) {
+    if (suggestion) {
+      $sText.textContent = suggestion;
+      $sWrap.style.display = "block";
+    } else {
+      $sText.textContent = "";
+      $sWrap.style.display = "none";
+    }
+  }
+}
+
+async function scanStrategist() {
+  const tab = await getActiveTab();
+  const $gen = document.getElementById("strategistGenerate");
+  const $copy = document.getElementById("strategistCopy");
+
+  // Default: disable until we know it's in-scope
+  if ($gen) $gen.disabled = true;
+  if ($copy) $copy.disabled = true;
+
+  if (!tab?.id || !tab?.url) {
+    strategistLast = null;
+    setStrategistUi({
+      pageName: "No active tab",
+      showPill: false,
+      note: "",
+      suggestion: ""
+    });
+    return null;
+  }
+
+  if (!isAllowedStrategistUrl(tab.url)) {
+    strategistLast = null;
+    setStrategistUi({
+      pageName: "Out of scope (domain restricted)",
+      showPill: false,
+      note: "This tool only runs on AAA/ACG + Meemic domains (and Author).",
+      suggestion: ""
+    });
+    return null;
+  }
+
+  const hostname = hostnameFromUrl(tab.url);
+  const env = detectEnv(hostname);
+  const brand = detectBrand(hostname);
+
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: "MAIN",
+      func: () => {
+        // Build a short, fairly stable selector for VEC placement hints.
+        function uniqueSelector(el) {
+          if (!el || el.nodeType !== 1) return "";
+          if (el.id) return `#${CSS.escape(el.id)}`;
+
+          // Prefer data-testid style anchors if present
+          const dataId = el.getAttribute('data-testid') || el.getAttribute('data-test') || el.getAttribute('data-qa');
+          if (dataId) return `[data-testid="${CSS.escape(dataId)}"], [data-test="${CSS.escape(dataId)}"], [data-qa="${CSS.escape(dataId)}"]`;
+
+          const parts = [];
+          let cur = el;
+          let depth = 0;
+          while (cur && cur.nodeType === 1 && cur !== document.body && depth < 4) {
+            let part = cur.tagName.toLowerCase();
+
+            // class hint (single class only, avoid giant class soups)
+            const cls = (cur.className || "").toString().trim().split(/\s+/).filter(Boolean);
+            if (cls.length) {
+              const keep = cls.find(c => /(^btn|cta|primary|hero|form|quote|start|submit)/i.test(c));
+              if (keep) part += `.${CSS.escape(keep)}`;
+            }
+
+            // nth-of-type within parent to disambiguate
+            const parent = cur.parentElement;
+            if (parent) {
+              const siblings = Array.from(parent.children).filter(x => x.tagName === cur.tagName);
+              if (siblings.length > 1) {
+                const idx = siblings.indexOf(cur) + 1;
+                part += `:nth-of-type(${idx})`;
+              }
+            }
+
+            parts.unshift(part);
+            cur = cur.parentElement;
+            depth++;
+          }
+          return parts.join(' > ');
+        }
+
+        const dd = !!window.digitalData;
+        const sObj = !!window.s;
+        const alloy = !!(window.alloy || window.adobeDataLayer);
+        const hasAt = !!(window.adobe && window.adobe.target);
+
+        const pageName =
+          window.digitalData?.page?.pageInfo?.pageName ||
+          window.s?.pageName ||
+          window.adobeDataLayer?.getState?.()?.page?.title ||
+          document.title ||
+          "";
+
+        const pathname = window.location?.pathname || "";
+        const h1El = document.querySelector('h1');
+        const h1 = (h1El?.innerText || '').trim();
+        const h1Selector = h1El ? uniqueSelector(h1El) : '';
+
+        function bestCta() {
+          const els = Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button]'));
+          const out = [];
+          for (const el of els) {
+            let text = '';
+            if (el.tagName === 'INPUT') text = (el.value || '').trim();
+            else text = ((el.innerText || el.textContent || '') + '').trim();
+            if (!text) continue;
+
+            const cls = ((el.className || '') + '').toLowerCase();
+            const t = text.toLowerCase();
+            let score = 0;
+
+            // Visible-ish? (offsetParent null often means display:none)
+            if (el.offsetParent !== null) score += 2;
+
+            // Favor common primary-CTA markers
+            if (/(btn-primary|primary|cta|main|submit|continue)/.test(cls)) score += 4;
+            if (/(get\s*a\s*quote|quote|pay|donate|start|next|continue|sign\s*in|log\s*in|enroll)/.test(t)) score += 4;
+
+            // Prefer shorter actionable labels
+            if (text.length > 0 && text.length <= 40) score += 2;
+
+            // Slight preference for links with href
+            let href = '';
+            if (el.tagName === 'A') {
+              href = el.href || '';
+              if (href) score += 1;
+            }
+
+            out.push({ score, text, href, tag: el.tagName, selector: uniqueSelector(el) });
+          }
+
+          out.sort((a, b) => b.score - a.score);
+          return out[0] || { score: 0, text: '', href: '', tag: '', selector: '' };
+        }
+
+        const cta = bestCta();
+        const formCount = document.querySelectorAll('form').length;
+        const firstForm = document.querySelector('form');
+        const formSelector = firstForm ? uniqueSelector(firstForm) : '';
+
+        return {
+          pageName,
+          pathname,
+          h1,
+          h1Selector,
+          ctaText: cta.text,
+          ctaHref: cta.href,
+          ctaSelector: cta.selector,
+          formCount,
+          formSelector,
+          dd,
+          sObj,
+          alloy,
+          hasAt
+        };
+      }
+    });
+
+    const data = results?.[0]?.result || { pageName: "", dd: false, sObj: false, alloy: false, hasAt: false };
+    const showPill = !data.dd && !data.sObj && !data.alloy;
+    const tooltip = `digitalData: ${data.dd ? "✓" : "✗"}\ns-object: ${data.sObj ? "✓" : "✗"}\nWeb SDK: ${data.alloy ? "✓" : "✗"}\nTarget: ${data.hasAt ? "✓" : "?"}`;
+
+    strategistLast = {
+      url: tab.url,
+      hostname,
+      env,
+      brand,
+      pageName: (data.pageName || "No Page Name Found"),
+      pathname: (data.pathname || ""),
+      h1: (data.h1 || ""),
+      h1Selector: (data.h1Selector || ""),
+      ctaText: (data.ctaText || ""),
+      ctaHref: (data.ctaHref || ""),
+      ctaSelector: (data.ctaSelector || ""),
+      formCount: Number.isFinite(+data.formCount) ? +data.formCount : 0,
+      formSelector: (data.formSelector || ""),
+      hasDD: data.dd,
+      hasS: data.sObj,
+      hasAlloy: data.alloy,
+      hasAt: data.hasAt
+    };
+
+    setStrategistUi({
+      pageName: strategistLast.pageName,
+      tooltip,
+      showPill,
+      note: showPill ? "No Adobe signals were detected. This usually means instrumentation is missing or blocked." : "Signals look present.",
+      suggestion: ""
+    });
+
+    if ($gen) $gen.disabled = false;
+    if ($copy) $copy.disabled = false;
+    return strategistLast;
+  } catch (e) {
+    console.error("Strategist scan failed:", e);
+    strategistLast = null;
+    setStrategistUi({
+      pageName: "Scan failed",
+      showPill: false,
+      note: (e?.message || String(e)),
+      suggestion: ""
+    });
+    return null;
+  }
+}
+
+/* ---------- Target Strategist: custom idea storage ---------- */
+async function loadCustomIdeaText() {
+  try {
+    const v = (await chrome.storage.sync.get([STRATEGIST_CUSTOM_KEY]))?.[STRATEGIST_CUSTOM_KEY];
+    return typeof v === 'string' ? v : '';
+  } catch {
+    return '';
+  }
+}
+
+async function saveCustomIdeaText(text) {
+  try {
+    await chrome.storage.sync.set({ [STRATEGIST_CUSTOM_KEY]: String(text || '') });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseCustomIdeas(text) {
+  const raw = (text || '').trim();
+  if (!raw) return [];
+
+  // JSON array of objects support
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter(x => x && typeof x === 'object')
+        .map(x => ({
+          title: String(x.title || x.name || '').trim(),
+          activityType: String(x.activityType || x.type || 'A/B').trim(),
+          audience: String(x.audience || 'All visitors').trim(),
+          placement: String(x.placement || '').trim(),
+          hypothesis: String(x.hypothesis || '').trim(),
+          variantA: String(x.variantA || x.a || '').trim(),
+          variantB: String(x.variantB || x.b || '').trim(),
+          kpi: String(x.kpi || x.primaryKpi || '').trim(),
+          guardrails: String(x.guardrails || '').trim(),
+          tags: Array.isArray(x.tags) ? x.tags.map(String) : []
+        }))
+        .filter(x => x.title);
+    }
+  } catch {
+    // fall through to plain-text parsing
+  }
+
+  // Plain text: one idea per line
+  return raw
+    .split(/\r?\n/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(line => ({
+      title: line,
+      activityType: 'A/B',
+      audience: 'All visitors',
+      placement: '',
+      hypothesis: '',
+      variantA: '',
+      variantB: '',
+      kpi: 'Quote start (or primary action)',
+      guardrails: 'Bounce, errors, LCP/CLS',
+      tags: ['custom']
+    }));
+}
+
+function buildSuggestionsFromScan(s, opts = {}) {
+  if (!s) return "";
+
+  const url = s.url || "";
+  const page = (s.pageName || "").trim();
+  const brand = s.brand || "ACG/AAA";
+  const env = s.env || "Production";
+  const pathname = (s.pathname || "").trim();
+  const h1 = (s.h1 || "").trim();
+  const h1Selector = (s.h1Selector || "").trim();
+  const ctaText = (s.ctaText || "").trim();
+  const ctaHref = (s.ctaHref || "").trim();
+  const ctaSelector = (s.ctaSelector || "").trim();
+  const formCount = Number.isFinite(+s.formCount) ? +s.formCount : null;
+  const formSelector = (s.formSelector || "").trim();
+
+  const signals = [
+    `digitalData: ${s.hasDD ? "✓" : "✗"}`,
+    `s.pageName: ${s.hasS ? "✓" : "✗"}`,
+    `Web SDK: ${s.hasAlloy ? "✓" : "✗"}`,
+    `Target: ${s.hasAt ? "✓" : "?"}`
+  ].join(" | ");
+
+  const hay = `${page} ${pathname} ${h1} ${ctaText}`.toLowerCase();
+  const inferredQuote = /quote|get\s*a\s*quote|start\s*quote|auto\s*quote|home\s*quote|bundle|insurance/.test(hay);
+  const isBilling = /pay|billing|payment|autopay|paperless|invoice/.test(hay);
+  const isDonate = /donate|donation|give|foundation|grant/.test(hay);
+  const isLogin = /login|log\s*in|sign\s*in|account/.test(hay);
+  const isSearchOrNav = /search|find|locations|agents|contact/.test(hay);
+
+  const pageType = String(opts.pageType || '').toLowerCase() ||
+    (inferredQuote ? 'quote' : (isBilling ? 'billing' : (isDonate ? 'donate' : (isLogin ? 'login' : (isSearchOrNav ? 'nav' : 'generic')))));
+
+  const ideaCount = Math.max(3, Math.min(50, parseInt(opts.ideaCount ?? 18, 10) || 18));
+  const includeCustom = !!opts.includeCustom;
+  const customIdeas = Array.isArray(opts.customIdeas) ? opts.customIdeas : [];
+
+  const activityNotes = [
+    "Implementation: Prefer VEC for simple HTML/text swaps; use Form-based for complex logic or SPA where selectors churn.",
+    "QA: Use Target QA mode and validate analytics events fire for each experience.",
+    "Guardrail: Watch performance (CLS/LCP) and error rate. Experiments that slow pages quietly poison results."
+  ].join(" ");
+
+  const checklist = [
+    "Tracking checklist (quick):",
+    "- Confirm Target is delivering (QA mode / response tokens)",
+    "- Confirm analytics hit(s) fire for impressions + primary action",
+    "- Define success metric in Target and align with Adobe Analytics/Launch if needed",
+    "- Set guardrails (bounce, errors, latency, form abandon)"
+  ].join("\n");
+
+  function ideaLine(i) {
+    const title = i.title || 'Idea';
+    const activityType = i.activityType || 'A/B';
+    const audience = i.audience || 'All visitors';
+    const placement = i.placement || 'TBD (use selectors below)';
+    const hypothesis = i.hypothesis || 'A small clarity improvement will increase engagement and downstream conversions.';
+    const a = i.variantA || 'Current experience.';
+    const b = i.variantB || 'Proposed experience.';
+    const primaryKpi = i.kpi || 'Primary action rate';
+    const guardrails = i.guardrails || 'Bounce, errors, LCP/CLS';
+
+    return [
+      `• ${title}`,
+      `  Activity type: ${activityType}`,
+      `  Audience: ${audience}`,
+      `  Placement: ${placement}`,
+      `  Hypothesis: ${hypothesis}`,
+      `  Variant A: ${a}`,
+      `  Variant B: ${b}`,
+      `  Primary KPI: ${primaryKpi}`,
+      `  Guardrails: ${guardrails}`
+    ].join("\n");
+  }
+
+  const placementHint = (() => {
+    const bits = [];
+    if (h1) bits.push(`H1: "${h1}"`);
+    if (ctaText) bits.push(`Primary CTA: "${ctaText}"`);
+    if (ctaHref) bits.push(`CTA href: ${ctaHref}`);
+    if (formCount != null) bits.push(`Forms detected: ${formCount}`);
+    return bits.length ? bits.join(" | ") : "(No obvious CTA/H1 detected)";
+  })();
+
+  // Deterministic shuffle so it doesn't feel random-chaotic from click to click.
+  function hashString(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+  function mulberry32(a) {
+    return function() {
+      let t = (a += 0x6D2B79F5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffleDeterministic(arr, seedStr) {
+    const out = arr.slice();
+    const rnd = mulberry32(hashString(seedStr));
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+
+  // --- Idea pools (Target-ready) ---
+  const universalIdeas = [
+    {
+      title: "Hero value prop + CTA clarity",
+      activityType: "A/B (or Auto-Allocate)",
+      audience: "All visitors",
+      placement: placementHint,
+      hypothesis: "Clearer benefits and a single primary action will increase engagement and downstream conversions.",
+      variantA: "Current hero headline/subhead/CTA.",
+      variantB: "Benefit-led headline + 1 proof point + simplified CTA label (action verb).",
+      kpi: "CTA click-through",
+      guardrails: "Bounce, scroll depth, LCP/CLS",
+      tags: ["universal"]
+    },
+    {
+      title: "Trust cue injection (proof right before action)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Near primary CTA / form start",
+      hypothesis: "Adding reassurance near the decision point reduces hesitation and increases starts/completions.",
+      variantA: "Current page without extra proof.",
+      variantB: "Add 1 trust module: rating, member count, coverage note, privacy reassurance.",
+      kpi: "Primary action starts",
+      guardrails: "Support clicks, errors",
+      tags: ["universal"]
+    },
+    {
+      title: "Mobile sticky CTA (reduce hunting)",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Mobile viewport only",
+      hypothesis: "Keeping the main action available on mobile increases action rate without extra scrolling.",
+      variantA: "No sticky CTA.",
+      variantB: "Sticky bottom bar with the primary CTA (optional secondary: phone/help).",
+      kpi: "Mobile CTA click-through",
+      guardrails: "Accidental clicks, bounce",
+      tags: ["universal","mobile"]
+    },
+    {
+      title: "New vs returning messaging",
+      activityType: "Experience Targeting (XT)",
+      audience: "New vs returning",
+      placement: "Hero module",
+      hypothesis: "Tailoring messaging to user context will increase conversion.",
+      variantA: "One message for everyone.",
+      variantB: "New: trust + value. Returning: speed + resume/continue.",
+      kpi: "Primary action starts",
+      guardrails: "Bounce, time on page",
+      tags: ["universal"]
+    },
+    {
+      title: "Auto-Target: optimize headline/CTA mix",
+      activityType: "Auto-Target",
+      audience: "All visitors",
+      placement: "Hero module",
+      hypothesis: "Letting Auto-Target learn the best message improves conversion without manual winner picking.",
+      variantA: "Current hero copy.",
+      variantB: "3-5 headline/CTA combos (benefit-led) in Auto-Target.",
+      kpi: "Primary action starts",
+      guardrails: "Bounce, performance metrics",
+      tags: ["universal"]
+    }
+  ];
+
+  const quoteIdeas = [
+    {
+      title: "Quote-start friction reducer (time + privacy)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Above the fold",
+      hypothesis: "Lower perceived effort and privacy concerns increases quote starts.",
+      variantA: "Current quote start messaging.",
+      variantB: "Add: 'Takes ~2 minutes' + privacy reassurance + one primary CTA.",
+      kpi: "Quote starts",
+      guardrails: "Quote completion, errors",
+      tags: ["quote"]
+    },
+    {
+      title: "CTA label test (intent language)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: ctaText ? `Primary CTA (currently: "${ctaText}")` : "Primary CTA",
+      hypothesis: "More specific action language increases clicks.",
+      variantA: ctaText ? `CTA label: "${ctaText}"` : "Current CTA label",
+      variantB: "Try: 'See my price' / 'Start my quote' / 'Get my estimate'",
+      kpi: "CTA click-through",
+      guardrails: "Bounce, misclicks",
+      tags: ["quote"]
+    },
+    {
+      title: "ZIP-first start (progressive disclosure)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Quote start module",
+      hypothesis: "Asking for a low-effort input first increases flow starts.",
+      variantA: "Full first step form.",
+      variantB: "Step 1 only asks ZIP (and maybe state), then expands.",
+      kpi: "Step 1 completion",
+      guardrails: "Total completion rate, errors",
+      tags: ["quote","form"]
+    },
+    {
+      title: "Progress indicator + expectations",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Quote flow header",
+      hypothesis: "Setting expectations reduces abandonment.",
+      variantA: "No progress indicator.",
+      variantB: "Add 'Step 1 of 3' + short explanation of what's needed.",
+      kpi: "Quote completion",
+      guardrails: "Time to complete, errors",
+      tags: ["quote","flow"]
+    },
+    {
+      title: "Inline validation / error copy",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Quote form fields",
+      hypothesis: "Clearer errors reduce retries and drop-offs.",
+      variantA: "Current validation messaging.",
+      variantB: "Add examples (e.g., ZIP format) and friendly error text.",
+      kpi: "Form submit success",
+      guardrails: "Error rate, support clicks",
+      tags: ["quote","form"]
+    },
+    {
+      title: "Bundle framing (anchoring)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Hero/offer module",
+      hypothesis: "Showing bundle value earlier increases quote intent.",
+      variantA: "Generic quote CTA.",
+      variantB: "Add bundle callout + benefit bullets (no unapproved pricing promises).",
+      kpi: "Quote starts",
+      guardrails: "Compliance review, bounce",
+      tags: ["quote"]
+    },
+    {
+      title: "Trust badge: 'No spam' + 'No obligation'",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Near quote start button",
+      hypothesis: "Reducing perceived risk increases starts.",
+      variantA: "No reassurance.",
+      variantB: "Add two microcopy lines: 'No obligation' + 'We respect your inbox'.",
+      kpi: "Quote starts",
+      guardrails: "Downstream completion",
+      tags: ["quote"]
+    },
+    {
+      title: "Phone assist vs online (segmented)",
+      activityType: "Experience Targeting (XT)",
+      audience: "Mobile visitors OR high-intent returners",
+      placement: "Primary CTA area",
+      hypothesis: "Offering the right help path increases overall conversion.",
+      variantA: "Single online CTA.",
+      variantB: "Add secondary: 'Talk to an agent' (click-to-call) with subtle styling.",
+      kpi: "Quote starts + calls",
+      guardrails: "Cannibalization of online completions",
+      tags: ["quote","mobile"]
+    },
+    {
+      title: "Social proof (localized)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Above fold or near form",
+      hypothesis: "Relevant proof increases confidence.",
+      variantA: "No proof.",
+      variantB: "Add: rating snippet / member count / 'Serving \"your state\"' line.",
+      kpi: "Quote starts",
+      guardrails: "Scroll depth, bounce",
+      tags: ["quote"]
+    },
+    {
+      title: "Auto-Allocate: optimize CTA placement",
+      activityType: "Auto-Allocate",
+      audience: "All visitors",
+      placement: "Hero / navigation",
+      hypothesis: "One placement will outperform others on starts.",
+      variantA: "CTA in current location.",
+      variantB: "Test CTA placement: hero vs sticky vs mid-page repeat.",
+      kpi: "Quote starts",
+      guardrails: "Bounce, accidental clicks",
+      tags: ["quote"]
+    },
+    {
+      title: "Reduce distractions (nav density)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Top nav / header",
+      hypothesis: "Fewer competing actions increases the primary action rate.",
+      variantA: "Full nav.",
+      variantB: "Simplified header (keep essentials) during quote start page.",
+      kpi: "Quote starts",
+      guardrails: "Return to nav tasks, bounce",
+      tags: ["quote"]
+    },
+    {
+      title: "Speed perception: 'Save and finish later'",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Quote flow header",
+      hypothesis: "Reducing anxiety about completion increases starts.",
+      variantA: "No mention of saving.",
+      variantB: "Add microcopy: 'You can save and finish later'.",
+      kpi: "Quote starts",
+      guardrails: "Completion rate",
+      tags: ["quote","flow"]
+    },
+    {
+      title: "Help tooltips (why we ask)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Form fields",
+      hypothesis: "Explaining 'why' reduces drop-off at sensitive fields.",
+      variantA: "Standard labels.",
+      variantB: "Add short 'why we ask' helper for 1-2 high-friction fields.",
+      kpi: "Field completion / step completion",
+      guardrails: "Time to complete",
+      tags: ["quote","form"]
+    },
+    {
+      title: "Offer framing: membership benefits",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Hero subhead",
+      hypothesis: "Benefit framing increases intent to start.",
+      variantA: "Generic value prop.",
+      variantB: "Add 2-3 benefit bullets (coverage, service, savings).",
+      kpi: "Quote starts",
+      guardrails: "Bounce",
+      tags: ["quote"]
+    },
+    {
+      title: "Auto-Target: choose the best objection killer",
+      activityType: "Auto-Target",
+      audience: "All visitors",
+      placement: "Near quote start",
+      hypothesis: "Different visitors respond to different reassurance.",
+      variantA: "Current messaging.",
+      variantB: "3-5 reassurance variants: price, privacy, speed, agent help.",
+      kpi: "Quote starts",
+      guardrails: "Completion rate",
+      tags: ["quote"]
+    },
+    {
+      title: "Add secondary CTA to continue saved quote (returners)",
+      activityType: "XT",
+      audience: "Returning visitors",
+      placement: "Hero / CTA area",
+      hypothesis: "Helping returners resume increases completion.",
+      variantA: "Only start CTA.",
+      variantB: "Add 'Continue my quote' secondary action for returners.",
+      kpi: "Quote completion",
+      guardrails: "New visitor starts",
+      tags: ["quote","flow"]
+    },
+    {
+      title: "Above-fold CTA duplication (for long heroes)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Hero area",
+      hypothesis: "Repeating the CTA after key info increases starts on long hero layouts.",
+      variantA: "Single CTA location.",
+      variantB: "Duplicate CTA after benefits block (same destination).",
+      kpi: "Quote starts",
+      guardrails: "Accidental clicks, bounce",
+      tags: ["quote"]
+    },
+    {
+      title: "Benefit bullet order test (price vs service vs trust)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Hero bullets",
+      hypothesis: "Leading with the best matching benefit increases intent.",
+      variantA: "Current bullet order.",
+      variantB: "Reorder bullets to lead with 1) savings, 2) coverage confidence, 3) local help.",
+      kpi: "Quote starts",
+      guardrails: "Bounce",
+      tags: ["quote"]
+    },
+    {
+      title: "Trust stack near CTA (security + privacy + legitimacy)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Near CTA",
+      hypothesis: "A compact trust stack reduces fear and boosts starts.",
+      variantA: "No trust stack.",
+      variantB: "Add 2-3 small trust cues (Secure, Privacy, Trusted/Member-owned style messaging as approved).",
+      kpi: "Quote starts",
+      guardrails: "Scroll depth",
+      tags: ["quote"]
+    },
+    {
+      title: "Micro-commitment copy: 'Check my rate' vs 'Get a quote'",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Primary CTA",
+      hypothesis: "Lower-commitment wording increases clicks.",
+      variantA: ctaText ? `Current CTA: \"${ctaText}\"` : "Current CTA label",
+      variantB: "Test softer phrasing: 'Check my rate' / 'See my options'",
+      kpi: "CTA click-through",
+      guardrails: "Quote completion",
+      tags: ["quote"]
+    },
+    {
+      title: "Remove competing CTAs (one job, one button)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Above the fold",
+      hypothesis: "Reducing competing actions increases primary starts.",
+      variantA: "Multiple CTAs (call/chat/learn more) competing.",
+      variantB: "Single primary CTA + subtle help link (secondary).",
+      kpi: "Quote starts",
+      guardrails: "Support contacts",
+      tags: ["quote"]
+    },
+    {
+      title: "Agent help as an objection-killer (not a detour)",
+      activityType: "A/B",
+      audience: "Mobile or high-friction visitors",
+      placement: "Near CTA",
+      hypothesis: "Offering help as reassurance increases starts without diverting intent.",
+      variantA: "No help mention.",
+      variantB: "Add a small line: 'Need help? Talk to an agent' (kept secondary).",
+      kpi: "Quote starts",
+      guardrails: "Call click-through vs online completion",
+      tags: ["quote","mobile"]
+    },
+    {
+      title: "Inline 'why we ask' on 1 sensitive field",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "First sensitive field",
+      hypothesis: "One short explanation reduces abandonment at the friction point.",
+      variantA: "No explanation.",
+      variantB: "Add a one-liner tooltip: 'We use this to match the right discounts' (as approved).",
+      kpi: "Step completion",
+      guardrails: "Time-to-complete",
+      tags: ["quote","form"]
+    },
+    {
+      title: "Field density test (2-column vs single column)",
+      activityType: "A/B",
+      audience: "Desktop visitors",
+      placement: "Quote step 1",
+      hypothesis: "A simpler layout reduces cognitive load and increases completion.",
+      variantA: "Two-column (dense) layout.",
+      variantB: "Single-column with clear grouping and spacing.",
+      kpi: "Step completion",
+      guardrails: "Time-to-complete",
+      tags: ["quote","form"]
+    },
+    {
+      title: "Pre-submit reassurance (what happens next)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Just above submit",
+      hypothesis: "Clarifying the next step reduces hesitation at submit.",
+      variantA: "No 'next step' cue.",
+      variantB: "Add: 'Next: we’ll show options' / 'Next: choose coverage' (no promises beyond reality).",
+      kpi: "Form submit",
+      guardrails: "Drop-off later in flow",
+      tags: ["quote","flow"]
+    },
+    {
+      title: "Contrast test on CTA button styling",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Primary CTA",
+      hypothesis: "Higher visual salience increases clicks.",
+      variantA: "Current button style.",
+      variantB: "Increase contrast (color/size) and add icon (optional) while meeting brand guidelines.",
+      kpi: "CTA click-through",
+      guardrails: "Accessibility (contrast), bounce",
+      tags: ["quote"]
+    },
+    {
+      title: "Urgency without pressure (seasonal hook)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Hero subhead",
+      hypothesis: "A gentle seasonal hook can increase intent.",
+      variantA: "No seasonal messaging.",
+      variantB: "Add a light hook (e.g., 'New year, new savings') if approved.",
+      kpi: "Quote starts",
+      guardrails: "Brand/compliance review",
+      tags: ["quote"]
+    },
+    {
+      title: "Exit-intent rescue (desktop) or back-button intercept (mobile)",
+      activityType: "A/B",
+      audience: "High intent abandoners",
+      placement: "On exit/back",
+      hypothesis: "Offering a save/assist path recovers abandoners.",
+      variantA: "No rescue.",
+      variantB: "Offer: save progress, call agent, or quick FAQ.",
+      kpi: "Recovered starts / resumes",
+      guardrails: "Annoyance signals (bounce, complaints)",
+      tags: ["quote","flow"]
+    },
+    {
+      title: "FAQ micro-module: answer 2 common objections",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Under CTA",
+      hypothesis: "Answering objections reduces hesitation.",
+      variantA: "No FAQ.",
+      variantB: "Add 2 expandable FAQs (privacy, time, what you’ll need).",
+      kpi: "Quote starts",
+      guardrails: "Page length, performance",
+      tags: ["quote"]
+    },
+    {
+      title: "Image vs no-image (focus test)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Hero",
+      hypothesis: "Reducing visual noise can improve clarity and clicks.",
+      variantA: "Current hero image.",
+      variantB: "Simplify or remove hero image; emphasize headline + CTA.",
+      kpi: "CTA click-through",
+      guardrails: "Brand sentiment, bounce",
+      tags: ["quote"]
+    },
+    {
+      title: "Sticky progress (flow pages)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Flow header",
+      hypothesis: "Always-visible progress reduces abandonment.",
+      variantA: "Static progress indicator.",
+      variantB: "Sticky progress bar on scroll (mobile + desktop).",
+      kpi: "Flow completion",
+      guardrails: "CLS, performance",
+      tags: ["quote","flow","mobile"]
+    },
+    {
+      title: "Save vs submit wording at key step",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Flow CTA",
+      hypothesis: "Clearer button labels reduce hesitation.",
+      variantA: "Generic 'Continue'.",
+      variantB: "More specific: 'Continue to coverage' / 'Continue to details'.",
+      kpi: "Step completion",
+      guardrails: "Confusion signals (back clicks)",
+      tags: ["quote","flow"]
+    }
+  ];
+
+  const billingIdeas = [
+    {
+      title: "Autopay benefit nudges",
+      activityType: "A/B",
+      audience: "Eligible users",
+      placement: "Payment summary area",
+      hypothesis: "Clear benefits and reduced distractions increase autopay enrollment and successful payments.",
+      variantA: "Current payment page.",
+      variantB: "Add short benefit bullets + emphasize primary action + demote secondary links.",
+      kpi: "Successful payments / autopay enroll",
+      guardrails: "Support clicks, errors",
+      tags: ["billing"]
+    }
+  ];
+
+  const donateIdeas = [
+    {
+      title: "Impact ladder + suggested amounts",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Donation module",
+      hypothesis: "Concrete impact framing increases donation starts and average gift.",
+      variantA: "Generic ask.",
+      variantB: "Preset amounts with impact descriptions + default suggested amount.",
+      kpi: "Donation starts / completed donations",
+      guardrails: "Completion rate",
+      tags: ["donate"]
+    }
+  ];
+
+  const loginIdeas = [
+    {
+      title: "Sign-in success assist",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Login form",
+      hypothesis: "Clear help options reduce login failures and abandonment.",
+      variantA: "Current sign-in.",
+      variantB: "Add inline help links (forgot password/username) + reduce competing CTAs.",
+      kpi: "Successful logins",
+      guardrails: "Password reset starts, errors",
+      tags: ["login"]
+    }
+  ];
+
+  const navIdeas = [
+    {
+      title: "Findability: top tasks module",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Top of page",
+      hypothesis: "Highlighting common tasks reduces pogo-sticking and increases completion.",
+      variantA: "Standard navigation.",
+      variantB: "Add top tasks cards (Locations, Roadside, Quote, Pay) above fold.",
+      kpi: "Task click-through",
+      guardrails: "Bounce",
+      tags: ["nav"]
+    }
+  ];
+
+  let pool = [...universalIdeas];
+  if (pageType === 'quote') pool = pool.concat(quoteIdeas);
+  else if (pageType === 'billing') pool = pool.concat(billingIdeas);
+  else if (pageType === 'donate') pool = pool.concat(donateIdeas);
+  else if (pageType === 'login') pool = pool.concat(loginIdeas);
+  else if (pageType === 'nav') pool = pool.concat(navIdeas);
+
+  if (includeCustom && customIdeas.length) pool = pool.concat(customIdeas);
+
+  // Shuffle, then take the requested count.
+  const shuffled = shuffleDeterministic(pool, `${url}|${page}|${pageType}`);
+  const chosen = shuffled.slice(0, Math.min(ideaCount, shuffled.length));
+
+  // --- Instrumentation warning ---
+  const missingNote = (!s.hasDD && !s.hasS && !s.hasAlloy)
+    ? "NOTE: No Adobe signals were detected. Before trusting results, confirm analytics instrumentation (digitalData / s-object / Web SDK) is firing on this page."
+    : "";
+
+  const header = [
+    `Target Strategist Ideas (${chosen.length})`,
+    `Brand: ${brand} | Env: ${env}`,
+    `URL: ${url}`,
+    `Page: ${page || "(unknown)"}`,
+    `Page type: ${pageType}`,
+    `Signals: ${signals}`,
+    (pathname ? `Path: ${pathname}` : ""),
+    (h1 ? `H1: ${h1}` : ""),
+    (ctaText ? `Primary CTA: ${ctaText}` : ""),
+    (h1Selector ? `H1 selector: ${h1Selector}` : ""),
+    (ctaSelector ? `CTA selector: ${ctaSelector}` : ""),
+    (formSelector ? `Form selector: ${formSelector}` : ""),
+    ""
+  ].filter(Boolean).join("\n");
+
+  const body = chosen.map((x, i) => `${i + 1}) ${ideaLine(x)}`).join("\n");
+
+  return [
+    header,
+    body,
+    "",
+    activityNotes,
+    "",
+    checklist,
+    (missingNote ? "\n" + missingNote : "")
+  ].join("\n");
+}
+
+async function copyStrategistSuggestion() {
+  const text = document.getElementById("strategistSuggestionText")?.textContent || "";
+  const note = document.getElementById("strategistNote");
+  if (!text.trim()) {
+    if (note) note.textContent = "Nothing to copy yet. Generate a suggestion first.";
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    if (note) note.textContent = "Copied to clipboard.";
+  } catch (e) {
+    console.error("Copy failed:", e);
+    if (note) note.textContent = "Copy failed. Your browser may be blocking clipboard access in popups.";
+  }
+}
 
 document.getElementById('applyBtn')?.addEventListener('click', async () => {
   const msgEl=document.getElementById('stateMsg');
@@ -103,8 +1157,35 @@ document.getElementById('badgeReset')?.addEventListener('click',async()=>{
   const note=document.getElementById('stateMsg2'); if(note) note.textContent="Position cleared for this URL (snapped to anchor).";
 });
 
+/* ---------- Target Strategist UI bindings ---------- */
+document.getElementById('strategistRefresh')?.addEventListener('click', async () => {
+  await scanStrategist();
+});
+
+document.getElementById('strategistGenerate')?.addEventListener('click', async () => {
+  const note = document.getElementById('strategistNote');
+  if (!strategistLast) await scanStrategist();
+  if (!strategistLast) {
+    if (note) note.textContent = "Nothing to generate. Open a supported page and rescan.";
+    return;
+  }
+  const pageType = document.getElementById('strategistPageType')?.value || 'quote';
+  const ideaCount = document.getElementById('strategistIdeaCount')?.value || 18;
+  const includeCustom = !!document.getElementById('strategistIncludeCustom')?.checked;
+  const customText = includeCustom ? await loadCustomIdeaText() : '';
+  const customIdeas = includeCustom ? parseCustomIdeas(customText) : [];
+  const suggestion = buildSuggestionsFromScan(strategistLast, { pageType, ideaCount, includeCustom, customIdeas });
+  setStrategistUi({ suggestion, note: "Ideas generated." });
+});
+
+document.getElementById('strategistCopy')?.addEventListener('click', async () => {
+  await copyStrategistSuggestion();
+});
+
 /* ---------- Init ---------- */
 (async function init(){
+  await initTabs();
+
   // Gate the State UI based on active tab domain
   const tab = await getActiveTab();
   const allowed = !!tab?.url && isAcgAaaHost(tab.url);
@@ -114,4 +1195,36 @@ document.getElementById('badgeReset')?.addEventListener('click',async()=>{
   catch{currentEnv='qa1';}
   setActiveEnvLink(currentEnv); 
   enableWebsitesAndAemLinks();
+
+  // Prime the strategist section
+  await scanStrategist();
+
+  // Load custom idea text into the textarea
+  const customText = await loadCustomIdeaText();
+  const ta = document.getElementById('strategistCustomInput');
+  if (ta) ta.value = customText;
 })();
+
+/* ---------- Target Strategist: Custom ideas UI bindings ---------- */
+document.getElementById('strategistCustomSave')?.addEventListener('click', async () => {
+  const ta = document.getElementById('strategistCustomInput');
+  const status = document.getElementById('strategistCustomStatus');
+  const text = ta?.value || '';
+
+  // Validate parseability (but still save raw text so user can fix it)
+  const ideas = parseCustomIdeas(text);
+  const ok = await saveCustomIdeaText(text);
+  if (status) {
+    status.textContent = ok
+      ? `Saved. Parsed ${ideas.length} idea(s).`
+      : `Save failed. Storage may be blocked.`;
+  }
+});
+
+document.getElementById('strategistCustomClear')?.addEventListener('click', async () => {
+  const ta = document.getElementById('strategistCustomInput');
+  const status = document.getElementById('strategistCustomStatus');
+  if (ta) ta.value = '';
+  const ok = await saveCustomIdeaText('');
+  if (status) status.textContent = ok ? 'Cleared.' : 'Clear failed.';
+});

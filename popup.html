@@ -4,255 +4,204 @@
   <meta charset="UTF-8" />
   <title>ACG Env & State Switcher</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>    
-    :root {
-      /* allow UA to pick until data-theme sets a specific one */
-      color-scheme: light dark;
-
-      /* LIGHT defaults */
-      --bg:#ffffff; --fg:#1f2328; --muted:rgba(0,0,0,.55);
-      --border:rgba(0,0,0,.18); --chip-border:rgba(0,0,0,.30);
-      --brand:#0078D4; --success-bg:rgba(46,160,67,.15); --success-br:rgba(46,160,67,.35);
-      --c-prod:#e03131; --c-stage:#692bd8; --c-qa:#2563eb; --c-dev:#4caf50;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        /* DARK when following system */
-        --bg:#0f1115; --fg:#e6edf3; --muted:rgba(255,255,255,.65);
-        --border:rgba(255,255,255,.18); --chip-border:rgba(255,255,255,.30);
-        --brand:#3aa3ff; --success-bg:rgba(46,160,67,.18); --success-br:rgba(46,160,67,.45);
-      }
-    }
-
-	/* Ensure selects & their options are readable in both themes */
-	select {
-	  background-color: var(--bg);
-	  color: var(--fg);
-	  border: 1px solid var(--chip-border);
-	  -webkit-text-fill-color: var(--fg); /* helps on some platforms */
-	}
-
-	/* Options when the list is open */
-	html[data-theme="dark"] select,
-	html[data-theme="dark"] option {
-	  background-color: #0f1115;
-	  color: #e6edf3;
-	}
-
-	html[data-theme="light"] select,
-	html[data-theme="light"] option {
-	  background-color: #ffffff;
-	  color: #1f2328;
-	}
-
-	/* Improve focus & hovered option contrast (helps on Windows/Chrome) */
-	select:focus {
-	  outline: 2px solid var(--brand);
-	  outline-offset: 2px;
-	}
-	select option:checked,
-	select option:hover {
-	  background-color: rgba(58,163,255,.25);
-	  color: var(--fg);
-	}
-
-
-    /* Force palette when user picks Light/Dark manually */
-    html[data-theme="light"] {
-      color-scheme: light;
-      --bg:#ffffff; --fg:#1f2328; --muted:rgba(0,0,0,.55);
-      --border:rgba(0,0,0,.18); --chip-border:rgba(0,0,0,.30);
-      --brand:#0078D4; --success-bg:rgba(46,160,67,.15); --success-br:rgba(46,160,67,.35);
-    }
-    html[data-theme="dark"] {
-      color-scheme: dark;
-      --bg:#0f1115; --fg:#e6edf3; --muted:rgba(255,255,255,.65);
-      --border:rgba(255,255,255,.18); --chip-border:rgba(255,255,255,.30);
-      --brand:#3aa3ff; --success-bg:rgba(46,160,67,.18); --success-br:rgba(46,160,67,.45);
-    }
-
-    /* Scrollbar styling to match theme explicitly */
-    html[data-theme="light"] ::-webkit-scrollbar { width: 10px; height: 10px; background: #ffffff; }
-    html[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,.3); border-radius: 8px; }
-    html[data-theme="dark"]  ::-webkit-scrollbar { width: 10px; height: 10px; background: #0f1115; }
-    html[data-theme="dark"]  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.3); border-radius: 8px; }
-
-    * { box-sizing:border-box; }
-    body { margin:0; padding:14px; width:420px; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--fg); }
-    h3 { margin:0 0 8px; font-size:16px; }
-    h4 { margin:12px 0 8px; font-size:14px; color:var(--muted); }
-    .card { border:1px solid var(--border); border-radius:10px; padding:12px; background:transparent; }
-    .stack { display:grid; gap:12px; }
-    select, button, input[type="number"], input[type="text"] {
-      width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--chip-border); background:transparent; color:var(--fg);
-    }
-    button { border:none; cursor:pointer; background:var(--brand); color:#fff; font-weight:600; }
-    button:hover { filter:brightness(.95); }
-    .row { display:flex; gap:8px; flex-wrap:wrap; }
-    .chip { display:inline-flex; align-items:center; justify-content:center; padding:8px 10px; border-radius:8px; border:1px solid var(--chip-border); text-decoration:none; font-size:13px; color:var(--fg); }
-    .disabled { pointer-events:none; opacity:.55; }
-    .hint { font-size:12px; color:var(--muted); margin-top:6px; }
-    .success { margin-top:8px; padding:8px 10px; border-radius:8px; font-size:12px; background:var(--success-bg); border:1px solid var(--success-br); }
-
-    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-    .brand { font-weight:700; font-size:14px; }
-    .theme-switch { display:inline-flex; border:1px solid var(--chip-border); border-radius:8px; overflow:hidden; }
-    .theme-switch button { appearance:none; border:0; background:transparent; color:var(--fg); padding:6px 10px; font-size:12px; line-height:1; cursor:pointer; }
-    .theme-switch button[aria-pressed="true"] { background:var(--brand); color:#fff; }
-
-    .seg { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
-    .seg a { text-decoration:none; text-align:center; padding:8px 10px; border-radius:8px; border:1px solid var(--chip-border); font-size:13px; color:var(--fg); }
-    .seg a.active { outline:2px solid var(--brand); outline-offset:-2px; }
-    .seg a[data-env="production"] { border-color:var(--c-prod); }
-    .seg a[data-env="stage1"]     { border-color:var(--c-stage); }
-    .seg a[data-env="qa1"]        { border-color:var(--c-qa); }
-    .seg a[data-env="dev1"]       { border-color:var(--c-dev); }
-    .seg a.active[data-env="production"] { background:var(--c-prod); color:#fff; }
-    .seg a.active[data-env="stage1"]     { background:var(--c-stage); color:#fff; }
-    .seg a.active[data-env="qa1"]        { background:var(--c-qa); color:#fff; }
-    .seg a.active[data-env="dev1"]       { background:var(--c-dev); color:#fff; }
-
-    .row.split { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
-    .btn-muted { background:transparent; color:var(--fg); border:1px solid var(--chip-border); }
-    .disclaimer { font-size: 10px; color: var(--muted); margin-top: 15px; text-align: center; }
- 
-    :root {
-      color-scheme: light dark;
-      --bg:#ffffff; --fg:#1f2328; --muted:rgba(0,0,0,.55);
-      --border:rgba(0,0,0,.18); --chip-border:rgba(0,0,0,.30);
-      --brand:#0078D4; --success-bg:rgba(46,160,67,.15); --success-br:rgba(46,160,67,.35);
-      --c-prod:#e03131; --c-stage:#692bd8; --c-qa:#2563eb; --c-dev:#4caf50;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg:#0f1115; --fg:#e6edf3; --muted:rgba(255,255,255,.65);
-        --border:rgba(255,255,255,.18); --chip-border:rgba(255,255,255,.30);
-        --brand:#3aa3ff; --success-bg:rgba(46,160,67,.18); --success-br:rgba(46,160,67,.45);
-      }
-    }
-    html[data-theme="light"]{color-scheme:light}
-    html[data-theme="dark"]{color-scheme:dark}
-    *{box-sizing:border-box}
-    body{margin:0;padding:14px;width:420px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--fg)}
-    h3{margin:0 0 8px;font-size:16px}
-    h4{margin:12px 0 8px;font-size:14px;color:var(--muted)}
-    .card{border:1px solid var(--border);border-radius:10px;padding:12px;background:transparent}
-    .stack{display:grid;gap:12px}
-    select,button,input[type="number"],input[type="text"]{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--chip-border);background:transparent;color:var(--fg)}
-    button{border:none;cursor:pointer;background:var(--brand);color:#fff;font-weight:600}
-    button:hover{filter:brightness(.95)}
-    .row{display:flex;gap:8px;flex-wrap:wrap}
-    .chip{display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:8px;border:1px solid var(--chip-border);text-decoration:none;font-size:13px;color:var(--fg)}
-    .disabled{pointer-events:none;opacity:.55}
-    .seg{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-    .seg a{text-decoration:none;text-align:center;padding:8px 10px;border-radius:8px;border:1px solid var(--chip-border);font-size:13px;color:var(--fg)}
-    .seg a.active{outline:2px solid var(--brand);outline-offset:-2px}
-    .seg a[data-env="production"]{border-color:var(--c-prod)}
-    .seg a[data-env="stage1"]{border-color:var(--c-stage)}
-    .seg a[data-env="qa1"]{border-color:var(--c-qa)}
-    .seg a[data-env="dev1"]{border-color:var(--c-dev)}
-    .seg a.active[data-env="production"]{background:var(--c-prod);color:#fff}
-    .seg a.active[data-env="stage1"]{background:var(--c-stage);color:#fff}
-    .seg a.active[data-env="qa1"]{background:var(--c-qa);color:#fff}
-    .seg a.active[data-env="dev1"]{background:var(--c-dev);color:#fff}
-    .row.split{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .btn-muted{background:transparent;color:var(--fg);border:1px solid var(--chip-border)}
-    .note{font-size:12px;color:var(--muted);margin-top:6px}
-  </style>
+  <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <div class="header">
-    <div class="brand">ACG State &amp; Env Switcher</div>
+  <header class="header">
+    <div class="brand">ACG Switcher</div>
+
     <div class="theme-switch" role="group" aria-label="Theme">
-      <button id="themeLight"  aria-pressed="false">Light</button>
-      <button id="themeDark"   aria-pressed="false">Dark</button>
-      <button id="themeSystem" aria-pressed="true">System</button>
+      <button id="themeLight"  aria-pressed="false" type="button">Light</button>
+      <button id="themeDark"   aria-pressed="false" type="button">Dark</button>
+      <button id="themeSystem" aria-pressed="true"  type="button">System</button>
     </div>
-  </div>
+  </header>
 
-  <div class="stack">
-    <!-- 1) STATE -->
-    <section class="card">
-      <h3>ACG State</h3>
-      <select id="stateSelect">
-        <option>Colorado</option><option>Florida</option><option>Georgia</option><option>Illinois</option>
-        <option>Indiana</option><option>Iowa</option><option>Michigan</option><option>Minnesota</option>
-        <option>Nebraska</option><option>North Carolina</option><option>North Dakota</option>
-        <option>Puerto Rico</option><option>South Carolina</option><option>Tennessee</option><option>Wisconsin</option>
-      </select>
-      <div style="height:10px"></div>
-      <button id="applyBtn" type="button">Apply State Cookies</button>
-      <div id="stateLockNote" class="hint" style="display:none">State cookies can only be applied when the active tab is on <strong>acg.aaa.com</strong> (or its subdomains).</div>
-      <div id="stateMsg"></div>
-    </section>
+  <nav class="tabs" aria-label="Sections">
+    <button class="tab" type="button" data-tab="state">State</button>
+    <button class="tab" type="button" data-tab="env">Env</button>
+    <button class="tab" type="button" data-tab="target">Target</button>
+    <button class="tab" type="button" data-tab="badge">Badge</button>
+  </nav>
 
-    <!-- 2) ENV SITES -->
-    <section class="card">
-      <h3 id="websitesHeading">Environment-Required Websites</h3>
-      <h4>Pick an Environment</h4>
-      <nav id="envRow" class="seg" role="tablist" aria-label="Environment">
-        <a href="#" data-env="production" role="tab" aria-selected="false">Prod</a>
-        <a href="#" data-env="stage1"     role="tab" aria-selected="false">Stage1</a>
-        <a href="#" data-env="qa1"        role="tab" aria-selected="false">QA1</a>
-        <a href="#" data-env="dev1"       role="tab" aria-selected="false">Dev1</a>
-      </nav>
+  <main class="views">
+    <!-- =====================
+         TAB: STATE
+         ===================== -->
+    <section class="view" data-view="state">
+      <section class="card">
+        <h3>ACG State</h3>
 
-      <h4 style="margin-top:12px;" id="authorHeading">Websites</h4>
-      <div class="row">
-        <a href="#" class="chip disabled" data-company="acg" aria-disabled="true" tabindex="-1">ACG/AAA</a>
-        <a href="#" class="chip disabled" data-company="meemic" aria-disabled="true" tabindex="-1">Meemic</a>
-        <a href="#" class="chip disabled" data-company="meemicfoundation" aria-disabled="true" tabindex="-1">Meemic Foundation</a>
-        <a href="#" id="authorLink" class="chip disabled" aria-disabled="true" tabindex="-1">AEM (Author)</a>
-      </div>
-    </section>
-
-    <!-- 3) OTHER -->
-    <section class="card">
-      <h3>Other Links</h3>
-      <div class="row">
-        <a class="chip" href="https://experience.adobe.com/#/@aaaautoclubsouth/home" target="_blank" rel="noopener">Adobe Experience</a>
-        <a class="chip" href="https://experienceleague.adobe.com/tools/calculator/testcalculator.html" target="_blank" rel="noopener">Adobe Calculator</a>
-        <a class="chip" href="https://tealiumiq.com" target="_blank" rel="noopener">Tealium IQ</a>
-        <a class="chip" href="https://university.tealium.com/learn/home" target="_blank" rel="noopener">Tealium University</a>
-      </div>
-    </section>
-
-    <!-- 4) BADGE OPTIONS -->
-    <section class="card">
-      <h3>Badge Options</h3>
-
-      <div class="row" role="radiogroup" aria-label="Badge mode">
-        <label class="chip"><input type="radio" name="badgeMode" value="corner"> Corner</label>
-        <label class="chip"><input type="radio" name="badgeMode" value="selector"> Anchor to selector</label>
-        <label class="chip"><input type="radio" name="badgeMode" value="free"> Free (drag; auto-save per URL)</label>
-      </div>
-
-      <div class="row">
-        <select id="badgeCorner">
-          <option value="top-left">Top Left</option>
-          <option value="top-right">Top Right</option>
-          <option value="bottom-left">Bottom Left</option>
-          <option value="bottom-right">Bottom Right</option>
+        <label class="label" for="stateSelect">State cookie bundle</label>
+        <select id="stateSelect">
+          <option>Colorado</option><option>Florida</option><option>Georgia</option><option>Illinois</option>
+          <option>Indiana</option><option>Iowa</option><option>Michigan</option><option>Minnesota</option>
+          <option>Nebraska</option><option>North Carolina</option><option>North Dakota</option>
+          <option>Puerto Rico</option><option>South Carolina</option><option>Tennessee</option><option>Wisconsin</option>
         </select>
-        <input id="badgeAnchor" value="#env-labels" placeholder="CSS selector (e.g. #env-labels)" />
-      </div>
 
-      <div class="row split">
-        <input id="badgeOffsetX" type="number" value="10" placeholder="offsetX" />
-        <input id="badgeOffsetY" type="number" value="32" placeholder="offsetY" />
-      </div>
-
-      <div class="row" style="margin-top:8px">
-        <button id="badgeReset" class="btn-muted" style="width:100%">Reset (clear this URL’s position)</button>
-      </div>
-
-      <div id="stateMsg2" class="note"></div>
+        <div class="spacer"></div>
+        <button id="applyBtn" type="button">Apply State Cookies</button>
+        <div id="stateLockNote" class="hint" style="display:none">
+          State cookies can only be applied when the active tab is on <strong>acg.aaa.com</strong> (or its subdomains).
+        </div>
+        <div id="stateMsg" class="msg"></div>
+      </section>
     </section>
-  </div>
 
-  <div class="disclaimer">
-    Not affiliated with AAA or its subsidiaries.<br />Author: Jack Nichols
-  </div>
+    <!-- =====================
+         TAB: ENV
+         ===================== -->
+    <section class="view" data-view="env">
+      <section class="card">
+        <h3>Environment</h3>
+        <div class="hint">Pick an env then click a site.</div>
+
+        <div class="seg" id="envRow" role="listbox" aria-label="Environment">
+          <a href="#" data-env="production">Prod</a>
+          <a href="#" data-env="stage1">Stage</a>
+          <a href="#" data-env="qa1">QA</a>
+          <a href="#" data-env="dev1">Dev</a>
+        </div>
+
+        <div class="spacer"></div>
+        <div class="row">
+          <a class="chip" href="#" data-company="acg">ACG</a>
+          <a class="chip" href="#" data-company="meemic">Meemic</a>
+          <a class="chip" href="#" data-company="meemicfoundation">Foundation</a>
+          <a class="chip" href="#" id="authorLink">AEM Author</a>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Other Links</h3>
+        <div class="row">
+          <a class="chip" href="https://experience.adobe.com/#/@aaaautoclubsouth/home" target="_blank" rel="noopener">Adobe Experience</a>
+          <a class="chip" href="https://experienceleague.adobe.com/tools/calculator/testcalculator.html" target="_blank" rel="noopener">Test Calculator</a>
+          <a class="chip" href="https://tealiumiq.com" target="_blank" rel="noopener">Tealium IQ</a>
+          <a class="chip" href="https://university.tealium.com/learn/home" target="_blank" rel="noopener">Tealium U</a>
+        </div>
+      </section>
+    </section>
+
+    <!-- =====================
+         TAB: TARGET
+         ===================== -->
+    <section class="view" data-view="target">
+      <section class="card" id="strategistCard">
+        <div class="row-between">
+          <h3>Target Strategist</h3>
+          <div class="row" style="gap:8px;justify-content:flex-end">
+            <span id="strategistErrorPill" class="pill pill-warn" data-tooltip="">⚠ DATA MISSING</span>
+            <button id="strategistRefresh" class="btn-ghost" type="button" title="Rescan Page">↻</button>
+          </div>
+        </div>
+
+        <div class="hint">
+          Quote-focused idea generator for Adobe Target. Scans the active tab for <strong>digitalData</strong>, <strong>s.pageName</strong>, Web SDK, and Target signals.
+        </div>
+
+        <div class="kv">
+          <div>
+            <div class="label">Detected page name</div>
+            <div id="strategistPageName" class="val">Scanning...</div>
+          </div>
+          <div>
+            <div class="label">Page type</div>
+            <select id="strategistPageType">
+              <option value="quote" selected>Quote</option>
+              <option value="billing">Billing</option>
+              <option value="donate">Donate</option>
+              <option value="login">Login</option>
+              <option value="generic">Generic</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="kv">
+          <div>
+            <div class="label">How many ideas</div>
+            <input id="strategistIdeaCount" type="number" min="3" max="50" value="18" />
+          </div>
+          <div>
+            <div class="label">Include custom ideas</div>
+            <label class="toggle">
+              <input id="strategistIncludeCustom" type="checkbox" checked />
+              <span>Use my saved ideas</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button id="strategistGenerate" type="button">Generate Ideas</button>
+          <button id="strategistCopy" class="btn-ghost" type="button">Copy</button>
+        </div>
+
+        <details class="details">
+          <summary>Custom ideas (paste from your other ChatGPT window)</summary>
+          <div class="hint" style="margin-top:8px">
+            Paste either:
+            <ul class="mini">
+              <li>Plain text (one idea per line), or</li>
+              <li>JSON array of objects (title/activityType/audience/placement/hypothesis/variantA/variantB/kpi/guardrails)</li>
+            </ul>
+            Click <strong>Save</strong>. These will be merged into future bundles.
+          </div>
+          <textarea id="strategistCustomInput" rows="8" placeholder="Example:\nTry CTA label 'Get a Quote' vs 'See My Price'\nAdd trust badge near quote form\n..."></textarea>
+          <div class="btn-row" style="margin-top:10px">
+            <button id="strategistCustomSave" type="button">Save</button>
+            <button id="strategistCustomClear" class="btn-ghost" type="button">Clear</button>
+          </div>
+          <div id="strategistCustomStatus" class="note"></div>
+        </details>
+
+        <div id="strategistSuggestion" class="suggestion">
+          <pre id="strategistSuggestionText"></pre>
+        </div>
+
+        <div id="strategistNote" class="note"></div>
+      </section>
+    </section>
+
+    <!-- =====================
+         TAB: BADGE
+         ===================== -->
+    <section class="view" data-view="badge">
+      <section class="card">
+        <h3>Badge Options</h3>
+        <div class="hint">Controls the little env badge on AEM Author pages.</div>
+
+        <div class="row" role="radiogroup" aria-label="Badge mode">
+          <label class="chip"><input type="radio" name="badgeMode" value="corner"> Corner</label>
+          <label class="chip"><input type="radio" name="badgeMode" value="selector"> Anchor to selector</label>
+          <label class="chip"><input type="radio" name="badgeMode" value="free"> Free (drag; auto-save per URL)</label>
+        </div>
+
+        <div class="row">
+          <select id="badgeCorner">
+            <option value="top-left">Top Left</option>
+            <option value="top-right">Top Right</option>
+            <option value="bottom-left">Bottom Left</option>
+            <option value="bottom-right">Bottom Right</option>
+          </select>
+          <input id="badgeAnchor" value="#env-labels" placeholder="CSS selector (e.g. #env-labels)" />
+        </div>
+
+        <div class="row split">
+          <input id="badgeOffsetX" type="number" value="10" placeholder="offsetX" />
+          <input id="badgeOffsetY" type="number" value="32" placeholder="offsetY" />
+        </div>
+
+        <div class="spacer"></div>
+        <button id="badgeReset" class="btn-ghost" type="button">Reset position (this URL)</button>
+        <div id="stateMsg2" class="note"></div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="disclaimer">
+    Not affiliated with AAA or its subsidiaries. Author: Jack Nichols
+  </footer>
 
   <script src="popup.js"></script>
 </body>
