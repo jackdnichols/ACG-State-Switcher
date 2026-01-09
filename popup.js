@@ -1124,6 +1124,89 @@ function applyTheme(mode){document.documentElement.setAttribute("data-theme",mod
 (async function initTheme(){const saved=(await chrome.storage.sync.get(['themeMode']))?.themeMode??'system';applyTheme(saved);document.getElementById('themeLight')?.addEventListener('click',async()=>{applyTheme('light');await chrome.storage.sync.set({themeMode:'light'});});document.getElementById('themeDark')?.addEventListener('click',async()=>{applyTheme('dark');await chrome.storage.sync.set({themeMode:'dark'});});document.getElementById('themeSystem')?.addEventListener('click',async()=>{applyTheme('system');await chrome.storage.sync.set({themeMode:'system'});});})();
 
 /* ---------- Badge Options (unchanged from last working) ---------- */
+
+// Badge storage keys (must match content-script.js)
+const BADGE_URL_POSITIONS_KEY = "badgePositionsByUrl";
+const BADGE_URL_MODE_KEY      = "badgeModeByUrl";
+const BADGE_HOST_MODE_KEY     = "badgeModePerHost";
+const BADGE_CORNER_KEY        = "badgeCornerPerHost";
+const BADGE_ANCHOR_KEY        = "badgeAnchorPerHost";
+const BADGE_OFFSET_KEY        = "badgeOffsetPerHost";
+
+function badgeUrlKeyNormalized(urlString) {
+  try {
+    const u = new URL(urlString);
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname || "/";
+    const hashFull = u.hash || "";
+    const hashNoQuery = hashFull.split("?")[0];
+    return `${host}|${path}|${hashNoQuery}`;
+  } catch {
+    return "";
+  }
+}
+
+async function initBadgeUiFromStorage(activeTab) {
+  try {
+    const tab = activeTab || await getActiveTab();
+    if (!tab?.url) return;
+
+    const u = new URL(tab.url);
+    const host = u.hostname.toLowerCase();
+    const urlKey = badgeUrlKeyNormalized(tab.url);
+
+    const all = await chrome.storage.sync.get([
+      BADGE_URL_MODE_KEY,
+      BADGE_HOST_MODE_KEY,
+      BADGE_CORNER_KEY,
+      BADGE_ANCHOR_KEY,
+      BADGE_OFFSET_KEY
+    ]);
+
+    const modeByUrl = all[BADGE_URL_MODE_KEY] || {};
+    const hostMode  = all[BADGE_HOST_MODE_KEY] || {};
+    const corners   = all[BADGE_CORNER_KEY] || {};
+    const anchors   = all[BADGE_ANCHOR_KEY] || {};
+    const offsets   = all[BADGE_OFFSET_KEY] || {};
+
+    const modeHere = (modeByUrl?.[host] || {})?.[urlKey];
+    const mode = (modeHere === "free" || modeHere === "selector" || modeHere === "corner")
+      ? modeHere
+      : (hostMode?.[host] || "selector");
+
+    // Set radio
+    document.querySelectorAll('input[name="badgeMode"]').forEach(r => {
+      r.checked = (r.value === mode);
+    });
+
+    // Corner / anchor / offsets (presets)
+    const corner = corners?.[host] || "top-left";
+    const anchor = anchors?.[host] || "#env-labels";
+    const off = offsets?.[host] || {};
+    const offX = Number.isFinite(off.offX) ? off.offX : 10;
+    const offY = Number.isFinite(off.offY) ? off.offY : 32;
+
+    const cornerSel = document.getElementById("badgeCorner");
+    if (cornerSel) cornerSel.value = corner;
+
+    const anchorInput = document.getElementById("badgeAnchor");
+    if (anchorInput) anchorInput.value = anchor;
+
+    const xInput = document.getElementById("badgeOffsetX");
+    const yInput = document.getElementById("badgeOffsetY");
+    if (xInput) xInput.value = String(offX);
+    if (yInput) yInput.value = String(offY);
+
+    // Friendly note
+    const note = document.getElementById('stateMsg2');
+    if (note) {
+      note.textContent = "Tip: You can drag the badge on the page to save. In Corner/Anchor modes, dragging adjusts offsets; in Free mode, it saves per URL.";
+    }
+  } catch (e) {
+    console.warn('initBadgeUiFromStorage failed', e);
+  }
+}
+
 async function withActiveTab(fn){const tabs=await chrome.tabs.query({active:true,currentWindow:true});const tab=tabs?.[0];if(!tab?.id)return;return fn(tab.id);}
 document.querySelectorAll('input[name="badgeMode"]').forEach(r=>{
   r.addEventListener('change',async()=>{
@@ -1203,6 +1286,9 @@ document.getElementById('strategistCopy')?.addEventListener('click', async () =>
   const customText = await loadCustomIdeaText();
   const ta = document.getElementById('strategistCustomInput');
   if (ta) ta.value = customText;
+
+  // Keep badge presets in sync with saved values
+  await initBadgeUiFromStorage(tab);
 })();
 
 /* ---------- Target Strategist: Custom ideas UI bindings ---------- */

@@ -100,7 +100,7 @@
       whiteSpace: "nowrap",
       transform: "translateZ(0)",
       display: "none",
-      cursor: (STATE.mode === "free" ? "grab" : "default")
+      cursor: "grab"
     });
     if (!dupe[0]) document.documentElement.appendChild(badgeEl);
     return badgeEl;
@@ -137,7 +137,7 @@
         el.style.left = `${safeNum(STATE.offX, 10)}px`;
         el.style.top  = `${safeNum(STATE.offY, 10)}px`;
       }
-      el.style.cursor = "default";
+      el.style.cursor = STATE.dragging ? "grabbing" : "grab";
       return;
     }
 
@@ -148,7 +148,7 @@
     else if (c === "top-right")  { el.style.right = `${offX}px`; el.style.top    = `${offY}px`; }
     else if (c === "bottom-left"){ el.style.left  = `${offX}px`; el.style.bottom = `${offY}px`; }
     else if (c === "bottom-right"){el.style.right = `${offX}px`; el.style.bottom = `${offY}px`; }
-    el.style.cursor = "default";
+    el.style.cursor = STATE.dragging ? "grabbing" : "grab";
   }
 
   function scheduleApply() { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(applyPosition); }
@@ -254,53 +254,104 @@
     } catch {}
   }
 
-  // ---- Drag (always on in free mode) ----
-  let dragStart = null;
+  // ---- Drag (all modes) ----
+// Dragging behavior:
+// - free: saves absolute x/y per URL
+// - selector: drag adjusts offsets relative to the anchor selector (keeps anchor)
+// - corner: drag adjusts offsets relative to chosen corner (keeps corner)
 
-  function onPointerDown(e) {
-    if (STATE.mode !== "free") return;
-    e.preventDefault();
-    const el = ensureBadge();
-    STATE.dragging = true;
-    el.setPointerCapture?.(e.pointerId);
-    dragStart = { startX: e.clientX, startY: e.clientY, origX: STATE.freeX, origY: STATE.freeY };
-    el.style.cursor = "grabbing";
-    window.addEventListener("pointermove", onPointerMove, { passive: false });
-    window.addEventListener("pointerup", onPointerUp, { passive: false });
+let dragStart = null;
+
+function onPointerDown(e) {
+  // Only primary button / primary pointer
+  if (e.button != null && e.button !== 0) return;
+  if (e.isPrimary === false) return;
+
+  e.preventDefault();
+  const el = ensureBadge();
+  STATE.dragging = true;
+  el.setPointerCapture?.(e.pointerId);
+
+  dragStart = {
+    startX: e.clientX,
+    startY: e.clientY,
+    mode: STATE.mode,
+    corner: STATE.corner,
+    origOffX: safeNum(STATE.offX, 0),
+    origOffY: safeNum(STATE.offY, 0),
+    origFreeX: safeNum(STATE.freeX, 10),
+    origFreeY: safeNum(STATE.freeY, 10)
+  };
+
+  el.style.cursor = "grabbing";
+  window.addEventListener("pointermove", onPointerMove, { passive: false });
+  window.addEventListener("pointerup", onPointerUp, { passive: false });
+}
+
+function onPointerMove(e) {
+  if (!STATE.dragging || !dragStart) return;
+  e.preventDefault();
+
+  const dx = e.clientX - dragStart.startX;
+  const dy = e.clientY - dragStart.startY;
+
+  if (dragStart.mode === "free") {
+    STATE.freeX = dragStart.origFreeX + dx;
+    STATE.freeY = dragStart.origFreeY + dy;
+  } else if (dragStart.mode === "selector") {
+    STATE.offX = clamp(dragStart.origOffX + dx, 0, 9999);
+    STATE.offY = clamp(dragStart.origOffY + dy, 0, 9999);
+  } else {
+    // corner
+    const c = (dragStart.corner || STATE.corner || "top-left");
+    const ox = dragStart.origOffX;
+    const oy = dragStart.origOffY;
+
+    const nextX = c.includes("right") ? (ox - dx) : (ox + dx);
+    const nextY = c.includes("bottom") ? (oy - dy) : (oy + dy);
+
+    STATE.offX = clamp(nextX, 0, 9999);
+    STATE.offY = clamp(nextY, 0, 9999);
   }
 
-  function onPointerMove(e) {
-    if (!STATE.dragging || STATE.mode !== "free") return;
-    e.preventDefault();
-    STATE.freeX = dragStart.origX + (e.clientX - dragStart.startX);
-    STATE.freeY = dragStart.origY + (e.clientY - dragStart.startY);
-    scheduleApply();
-  }
+  scheduleApply();
+}
 
-  function onPointerUp(e) {
-    if (!STATE.dragging) return;
-    e.preventDefault();
-    const el = ensureBadge();
-    STATE.dragging = false;
-    el.style.cursor = "grab";
-    el.releasePointerCapture?.(e.pointerId);
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
-    autoSavePositionForUrl();
-  }
+async function onPointerUp(e) {
+  if (!STATE.dragging) return;
+  e.preventDefault();
 
-  function wireDrag() {
-    const el = ensureBadge();
-    el.removeEventListener("pointerdown", onPointerDown);
-    if (STATE.mode === "free") {
-      el.addEventListener("pointerdown", onPointerDown, { passive: false });
-      el.style.cursor = "grab";
+  const el = ensureBadge();
+  STATE.dragging = false;
+  el.releasePointerCapture?.(e.pointerId);
+
+  window.removeEventListener("pointermove", onPointerMove);
+  window.removeEventListener("pointerup", onPointerUp);
+
+  // Persist
+  try {
+    if (dragStart?.mode === "free") {
+      await autoSavePositionForUrl();
     } else {
-      el.style.cursor = "default";
+      // Keep the preset mode, just store the new offsets.
+      await persistHostCornerAnchorOffsets();
+      await saveUrlMode(dragStart?.mode || STATE.mode);
     }
-  }
+  } catch {}
 
-  // ---- Boot ----
+  dragStart = null;
+  el.style.cursor = "grab";
+  scheduleApply();
+}
+
+function wireDrag() {
+  const el = ensureBadge();
+  el.removeEventListener("pointerdown", onPointerDown);
+  el.addEventListener("pointerdown", onPointerDown, { passive: false });
+  el.style.cursor = STATE.dragging ? "grabbing" : "grab";
+}
+
+// ---- Boot ----
   (async () => {
     await loadPersistedForUrl();
 
