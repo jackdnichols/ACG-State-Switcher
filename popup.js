@@ -112,7 +112,198 @@ function detectEnv(hostname) {
   return "Production";
 }
 
-function setStrategistUi({ pageName, tooltip, showPill, note, suggestion } = {}) {
+function setPill(el, state, text, tooltip) {
+  if (!el) return;
+  el.classList.remove("pill-ok", "pill-warn", "pill-info", "pill-neutral", "hidden");
+  const cls = state === "ok" ? "pill-ok" : state === "warn" ? "pill-warn" : state === "info" ? "pill-info" : "pill-neutral";
+  el.classList.add(cls);
+  el.textContent = text || "";
+  if (tooltip != null) el.setAttribute("data-tooltip", tooltip);
+}
+
+function updateStrategistStatusPills(s) {
+  const $domain = document.getElementById("pillDomain");
+  const $dd = document.getElementById("pillDD");
+  const $s = document.getElementById("pillS");
+  const $web = document.getElementById("pillWebSDK");
+  const $tgt = document.getElementById("pillTarget");
+  const $sel = document.getElementById("pillSelectors");
+
+  if (!s) {
+    setPill($domain, "neutral", "Domain", "");
+    setPill($dd, "neutral", "digitalData", "");
+    setPill($s, "neutral", "s.pageName", "");
+    setPill($web, "neutral", "Web SDK", "");
+    setPill($tgt, "neutral", "Target", "");
+    setPill($sel, "neutral", "Selectors", "");
+    return;
+  }
+
+  const host = (s.hostname || "").toLowerCase();
+  setPill($domain, "info", `${s.brand || "Site"} • ${s.env || "Env"}`, host);
+
+  setPill($dd, s.hasDD ? "ok" : "warn", `digitalData ${s.hasDD ? "✓" : "✗"}`, "digitalData presence (window.digitalData)");
+  setPill($s, s.hasS ? "ok" : "warn", `s.pageName ${s.hasS ? "✓" : "✗"}`, "Adobe Analytics s-object presence (window.s.pageName)");
+  setPill($web, s.hasAlloy ? "ok" : "warn", `Web SDK ${s.hasAlloy ? "✓" : "✗"}`, "Adobe Web SDK / data layer presence (window.alloy / adobeDataLayer)");
+
+  // Target can be delivered by at.js OR via Web SDK, so treat missing at.js as "info" if Web SDK exists.
+  const tgtState = s.hasAt ? "ok" : (s.hasAlloy ? "info" : "warn");
+  const tgtText = s.hasAt ? "Target ✓" : (s.hasAlloy ? "Target ?" : "Target ✗");
+  const tgtTip = s.hasAt
+    ? "window.adobe.target detected (at.js style)."
+    : (s.hasAlloy ? "Target might be delivered via Web SDK (no at.js object detected)." : "No Target signal detected.");
+  setPill($tgt, tgtState, tgtText, tgtTip);
+
+  const hasSelectors = !!(s.h1Selector || s.ctaSelector || s.formSelector);
+  const selTip = [
+    s.h1Selector ? `H1: ${s.h1Selector}` : "H1: (none)",
+    s.ctaSelector ? `CTA: ${s.ctaSelector}` : "CTA: (none)",
+    s.formSelector ? `Form: ${s.formSelector}` : "Form: (none)"
+  ].join("\n");
+  setPill($sel, hasSelectors ? "ok" : "warn", hasSelectors ? "Selectors ✓" : "Selectors ✗", selTip);
+}
+
+function renderStrategistIdeas(ideas) {
+  const list = document.getElementById("strategistIdeaList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  if (!Array.isArray(ideas) || ideas.length === 0) return;
+
+  ideas.forEach((i, idx) => {
+    const card = document.createElement("div");
+    card.className = "idea-card";
+
+    const head = document.createElement("div");
+    head.className = "idea-head";
+
+    const title = document.createElement("div");
+    title.className = "idea-title";
+    title.textContent = i.title || `Idea ${idx + 1}`;
+
+    const num = document.createElement("div");
+    num.className = "idea-num";
+    num.textContent = `#${idx + 1}`;
+
+    const actions = document.createElement("div");
+    actions.className = "idea-actions";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "idea-copy btn-ghost";
+    copyBtn.textContent = "Copy";
+    copyBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      copyStrategistIdea(i, idx + 1, copyBtn);
+    });
+
+    actions.appendChild(copyBtn);
+    actions.appendChild(num);
+
+    head.appendChild(title);
+    head.appendChild(actions);
+    card.appendChild(head);
+
+    const meta = document.createElement("div");
+    meta.className = "idea-meta";
+    const tags = [i.activityType, i.audience].filter(Boolean);
+    (i.tags || []).forEach(t => tags.push(String(t)));
+    tags.slice(0, 6).forEach(t => {
+      const tag = document.createElement("span");
+      tag.className = "idea-tag";
+      tag.textContent = t;
+      meta.appendChild(tag);
+    });
+    if (meta.childNodes.length) card.appendChild(meta);
+
+    const grid = document.createElement("div");
+    grid.className = "idea-grid";
+
+    function addKV(k, v) {
+      if (!v) return;
+      const row = document.createElement("div");
+      row.className = "idea-kv";
+      const kk = document.createElement("span");
+      kk.className = "k";
+      kk.textContent = k + ": ";
+      const vv = document.createElement("span");
+      vv.textContent = v;
+      row.appendChild(kk);
+      row.appendChild(vv);
+      grid.appendChild(row);
+    }
+
+    const test = i.change || i.test || i.title;
+    const a = i.a || i.variantA;
+    const b = i.b || i.variantB;
+    const why = i.why || i.hypothesis;
+    const measure = i.kpi || i.measure;
+    const guard = i.guardrails || i.guardrail;
+
+    addKV("Placement", i.placement);
+    addKV("Test", test);
+    if (why && String(why).length <= 140) addKV("Why", why);
+    addKV("A", a);
+    addKV("B", b);
+    addKV("Measure", measure);
+    if (guard) addKV("Guardrail", guard);
+
+    if (grid.childNodes.length) card.appendChild(grid);
+
+    list.appendChild(card);
+  });
+}
+
+function formatIdeaForClipboard(i, idx) {
+  const title = i?.title || `Idea ${idx}`;
+  const activityType = i?.activityType || "A/B";
+  const audience = i?.audience || "All visitors";
+  const placement = i?.placement || "";
+
+  const test = i?.change || i?.test || title;
+  const why = i?.why || i?.hypothesis || "";
+  const a = i?.a || i?.variantA || "";
+  const b = i?.b || i?.variantB || "";
+  const measure = i?.kpi || i?.measure || "";
+  const guard = i?.guardrails || i?.guardrail || "";
+
+  return [
+    `Target Idea #${idx}: ${title}`,
+    `Activity: ${activityType}`,
+    `Audience: ${audience}`,
+    placement ? `Placement: ${placement}` : "",
+    test ? `Test: ${test}` : "",
+    (why && String(why).length <= 200) ? `Why: ${why}` : "",
+    a ? `A: ${a}` : "",
+    b ? `B: ${b}` : "",
+    measure ? `Measure: ${measure}` : "",
+    guard ? `Guardrail: ${guard}` : ""
+  ].filter(Boolean).join("\n");
+}
+
+
+async function copyStrategistIdea(i, idx, btn) {
+  const note = document.getElementById("strategistNote");
+  try {
+    await navigator.clipboard.writeText(formatIdeaForClipboard(i, idx));
+    if (note) note.textContent = `Copied idea #${idx}.`;
+    if (btn) {
+      btn.classList.add("copied");
+      const old = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => {
+        btn.classList.remove("copied");
+        btn.textContent = old;
+      }, 900);
+    }
+  } catch (e) {
+    console.error("Idea copy failed:", e);
+    if (note) note.textContent = "Copy failed. Your browser may be blocking clipboard access in popups.";
+  }
+}
+
+function setStrategistUi({ pageName, tooltip, showPill, note, suggestion, ideas } = {}) {
   const $name = document.getElementById("strategistPageName");
   const $pill = document.getElementById("strategistErrorPill");
   const $note = document.getElementById("strategistNote");
@@ -120,21 +311,28 @@ function setStrategistUi({ pageName, tooltip, showPill, note, suggestion } = {})
   const $sText = document.getElementById("strategistSuggestionText");
 
   if ($name && pageName != null) $name.textContent = pageName;
+
   if ($pill) {
-    $pill.style.display = showPill ? "inline-flex" : "none";
+    $pill.classList.toggle("hidden", !showPill);
     if (tooltip != null) $pill.setAttribute("data-tooltip", tooltip);
   }
+
   if ($note && note != null) $note.textContent = note;
-  if ($sWrap && $sText) {
-    if (suggestion) {
-      $sText.textContent = suggestion;
-      $sWrap.style.display = "block";
-    } else {
-      $sText.textContent = "";
-      $sWrap.style.display = "none";
-    }
+
+  // Render cards (borders) + keep the raw text for Copy
+  if (Array.isArray(ideas)) renderStrategistIdeas(ideas);
+
+  if ($sText) {
+    $sText.textContent = suggestion || "";
+  }
+
+  if ($sWrap) {
+    const hasCards = Array.isArray(ideas) && ideas.length > 0;
+    const hasText = !!(suggestion && suggestion.trim());
+    $sWrap.style.display = (hasCards || hasText) ? "block" : "none";
   }
 }
+
 
 async function scanStrategist() {
   const tab = await getActiveTab();
@@ -147,22 +345,26 @@ async function scanStrategist() {
 
   if (!tab?.id || !tab?.url) {
     strategistLast = null;
+    updateStrategistStatusPills(null);
     setStrategistUi({
       pageName: "No active tab",
       showPill: false,
       note: "",
-      suggestion: ""
+      suggestion: "",
+      ideas: []
     });
     return null;
   }
 
   if (!isAllowedStrategistUrl(tab.url)) {
     strategistLast = null;
+    updateStrategistStatusPills(null);
     setStrategistUi({
       pageName: "Out of scope (domain restricted)",
       showPill: false,
       note: "This tool only runs on AAA/ACG + Meemic domains (and Author).",
-      suggestion: ""
+      suggestion: "",
+      ideas: []
     });
     return null;
   }
@@ -316,12 +518,14 @@ async function scanStrategist() {
       hasAt: data.hasAt
     };
 
+    updateStrategistStatusPills(strategistLast);
     setStrategistUi({
       pageName: strategistLast.pageName,
       tooltip,
       showPill,
       note: showPill ? "No Adobe signals were detected. This usually means instrumentation is missing or blocked." : "Signals look present.",
-      suggestion: ""
+      suggestion: "",
+      ideas: []
     });
 
     if ($gen) $gen.disabled = false;
@@ -330,11 +534,13 @@ async function scanStrategist() {
   } catch (e) {
     console.error("Strategist scan failed:", e);
     strategistLast = null;
+    updateStrategistStatusPills(null);
     setStrategistUi({
       pageName: "Scan failed",
       showPill: false,
       note: (e?.message || String(e)),
-      suggestion: ""
+      suggestion: "",
+      ideas: []
     });
     return null;
   }
@@ -461,24 +667,26 @@ function buildSuggestionsFromScan(s, opts = {}) {
     const title = i.title || 'Idea';
     const activityType = i.activityType || 'A/B';
     const audience = i.audience || 'All visitors';
-    const placement = i.placement || 'TBD (use selectors below)';
-    const hypothesis = i.hypothesis || 'A small clarity improvement will increase engagement and downstream conversions.';
-    const a = i.variantA || 'Current experience.';
-    const b = i.variantB || 'Proposed experience.';
-    const primaryKpi = i.kpi || 'Primary action rate';
-    const guardrails = i.guardrails || 'Bounce, errors, LCP/CLS';
+    const placement = i.placement || '';
+
+    const test = i.change || i.test || title;
+    const why = i.why || i.hypothesis || '';
+    const a = i.a || i.variantA || 'Current experience.';
+    const b = i.b || i.variantB || 'Proposed experience.';
+    const measure = i.kpi || i.measure || 'Primary action rate';
+    const guard = i.guardrails || i.guardrail || '';
 
     return [
       `• ${title}`,
-      `  Activity type: ${activityType}`,
-      `  Audience: ${audience}`,
-      `  Placement: ${placement}`,
-      `  Hypothesis: ${hypothesis}`,
-      `  Variant A: ${a}`,
-      `  Variant B: ${b}`,
-      `  Primary KPI: ${primaryKpi}`,
-      `  Guardrails: ${guardrails}`
-    ].join("\n");
+      `  Activity: ${activityType} | Audience: ${audience}`,
+      placement ? `  Placement: ${placement}` : '',
+      `  Test: ${test}`,
+      (why && String(why).length <= 140) ? `  Why: ${why}` : '',
+      `  A: ${a}`,
+      `  B: ${b}`,
+      `  Measure: ${measure}`,
+      guard ? `  Guardrail: ${guard}` : ''
+    ].filter(Boolean).join("\n");
   }
 
   const placementHint = (() => {
@@ -582,6 +790,224 @@ function buildSuggestionsFromScan(s, opts = {}) {
   ];
 
   const quoteIdeas = [
+    {
+      title: "CTA button color (high contrast)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: ctaSelector ? `Primary CTA button (${ctaSelector})` : (ctaText ? `Primary CTA (${ctaText})` : "Primary CTA button"),
+      change: "Change primary CTA button color",
+      variantA: "Current button color/style.",
+      variantB: "Use a high-contrast accent color (keep text white).",
+      kpi: "CTA clicks → quote starts",
+      guardrails: "Bounce, misclicks",
+      tags: ["quote","cta","color"]
+    },
+    {
+      title: "CTA button size + weight",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: ctaSelector ? `Primary CTA button (${ctaSelector})` : "Primary CTA button",
+      change: "Make primary CTA more prominent",
+      variantA: "Current button size.",
+      variantB: "Increase padding/font-weight; add subtle icon (arrow) if on-brand.",
+      kpi: "CTA clicks",
+      guardrails: "Misclicks, bounce",
+      tags: ["quote","cta","ux"]
+    },
+    {
+      title: "Primary CTA copy (price language)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: ctaText ? `CTA label (currently: "${ctaText}")` : "Primary CTA label",
+      change: "Swap CTA wording to price/benefit intent",
+      variantA: ctaText ? `"${ctaText}"` : "Current label",
+      variantB: "Try: 'See my price' or 'Start my quote'.",
+      kpi: "CTA clicks → quote starts",
+      guardrails: "Bounce",
+      tags: ["quote","cta","copy"]
+    },
+    {
+      title: "Secondary CTA style (agent/call)",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Near primary CTA",
+      change: "Add a secondary help path without stealing focus",
+      variantA: "Single primary CTA.",
+      variantB: "Add secondary outline link: 'Talk to an agent' (click-to-call).",
+      kpi: "Quote starts + calls",
+      guardrails: "Cannibalization of online starts",
+      tags: ["quote","mobile","assist"]
+    },
+    {
+      title: "Microcopy under CTA (2 bullets)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Under the primary CTA",
+      change: "Add reassurance microcopy",
+      variantA: "No reassurance text.",
+      variantB: "Add: 'No obligation' + 'We respect your privacy'.",
+      kpi: "Quote starts",
+      guardrails: "Downstream completion",
+      tags: ["quote","trust","copy"]
+    },
+    {
+      title: "ZIP-first start (single input)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: formSelector ? `Quote start form (${formSelector})` : "Quote start module",
+      change: "Ask for ZIP first, then expand",
+      variantA: "Full form on step 1.",
+      variantB: "Step 1 asks ZIP (optional: state) then expands to the full form.",
+      kpi: "Step-1 completion",
+      guardrails: "Total completion rate",
+      tags: ["quote","form"]
+    },
+    {
+      title: "Remove phone/email from step 1",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: formSelector ? `Quote form fields (${formSelector})` : "Quote form",
+      change: "Move contact fields later",
+      variantA: "Phone/email required early.",
+      variantB: "Collect phone/email after price/coverage preview (or later step).",
+      kpi: "Quote starts → completion",
+      guardrails: "Lead quality (if tracked)",
+      tags: ["quote","form","friction"]
+    },
+    {
+      title: "Progress bar: Step 1 of 3",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Quote flow header",
+      change: "Show progress + time expectation",
+      variantA: "No progress/time hint.",
+      variantB: "Add: 'Step 1 of 3' + '~2 minutes'.",
+      kpi: "Completion rate",
+      guardrails: "Time to complete",
+      tags: ["quote","flow"]
+    },
+    {
+      title: "Inline error copy (examples)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Quote form validation",
+      change: "Make validation messages actionable",
+      variantA: "Generic error text.",
+      variantB: "Add examples (ZIP format, date format) and friendly tone.",
+      kpi: "Form submit success",
+      guardrails: "Error rate",
+      tags: ["quote","form","validation"]
+    },
+    {
+      title: "Repeat CTA mid-page",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "After first info block",
+      change: "Add a second CTA after benefits",
+      variantA: "Single CTA above fold.",
+      variantB: "Add another 'Start quote' button mid-page.",
+      kpi: "Quote starts",
+      guardrails: "Misclicks",
+      tags: ["quote","cta"]
+    },
+    // More "to the point" quote tests (Target VEC-friendly)
+    {
+      title: "CTA button color (high contrast)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: ctaSelector ? `CTA button (${ctaSelector})` : "Primary CTA button",
+      change: "Change the primary CTA button color to a higher-contrast accent",
+      variantA: "Keep current CTA button color",
+      variantB: "Use AAA blue (or a warm accent) with white text; increase contrast and keep the rest unchanged",
+      kpi: "CTA clicks → quote starts",
+      guardrails: "Bounce, misclicks",
+      tags: ["quote","cta","color"]
+    },
+    {
+      title: "CTA button style (filled vs outline)",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: ctaSelector ? `CTA button (${ctaSelector})` : "Primary CTA button",
+      change: "Test filled primary button vs outline style",
+      variantA: "Current button style",
+      variantB: "Filled high-contrast button + slightly larger padding + stronger hover state",
+      kpi: "CTA clicks",
+      guardrails: "Accidental clicks, CLS",
+      tags: ["quote","cta","ui"]
+    },
+    {
+      title: "CTA copy: price language",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: ctaText ? `Primary CTA (currently: "${ctaText}")` : "Primary CTA",
+      change: "Use price/estimate language instead of generic quote language",
+      variantA: ctaText ? `CTA: "${ctaText}"` : "Current CTA label",
+      variantB: "CTA: 'See my price' (or 'Get my estimate')",
+      kpi: "CTA clicks → quote starts",
+      guardrails: "Bounce",
+      tags: ["quote","cta","copy"]
+    },
+    {
+      title: "Form friction: move phone/email later",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Quote flow step 1",
+      change: "Remove phone/email from step 1 and collect later",
+      variantA: "Step 1 asks for contact info",
+      variantB: "Step 1 collects only ZIP + basic vehicle/home info; ask contact later",
+      kpi: "Step 1 completion",
+      guardrails: "Total completion rate",
+      tags: ["quote","form","friction"]
+    },
+    {
+      title: "Trust microcopy under CTA",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Under primary CTA",
+      change: "Add 1 short reassurance line under the CTA",
+      variantA: "No reassurance under CTA",
+      variantB: "Add: 'No spam. No obligation.' (or 'Takes ~2 minutes')",
+      kpi: "Quote starts",
+      guardrails: "Completion rate",
+      tags: ["quote","trust","copy"]
+    },
+    {
+      title: "Sticky CTA on quote pages",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Mobile only",
+      change: "Add sticky bottom CTA",
+      variantA: "No sticky CTA",
+      variantB: "Sticky bottom bar with 'Start my quote' (and optional 'Call an agent')",
+      kpi: "Mobile quote starts",
+      guardrails: "Accidental taps, bounce",
+      tags: ["quote","mobile","cta"]
+    },
+    {
+      title: "Step header: expectations",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Quote flow header",
+      change: "Add a short expectation line and step count",
+      variantA: "No step expectations",
+      variantB: "Show 'Step 1 of 3' + 'Have your vehicle info handy'",
+      kpi: "Quote completion",
+      guardrails: "Time to complete",
+      tags: ["quote","flow"]
+    },
+    {
+      title: "Hero swap: image vs icon",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Hero module",
+      change: "Swap hero visual to reduce distraction and increase CTA focus",
+      variantA: "Current hero image",
+      variantB: "Simpler visual (icon/illustration) + tighter copy + CTA prominence",
+      kpi: "CTA clicks",
+      guardrails: "Engagement drop",
+      tags: ["quote","hero","design"]
+    },
+
     {
       title: "Quote-start friction reducer (time + privacy)",
       activityType: "A/B",
@@ -1064,7 +1490,7 @@ function buildSuggestionsFromScan(s, opts = {}) {
 
   const body = chosen.map((x, i) => `${i + 1}) ${ideaLine(x)}`).join("\n");
 
-  return [
+  const text = [
     header,
     body,
     "",
@@ -1073,7 +1499,14 @@ function buildSuggestionsFromScan(s, opts = {}) {
     checklist,
     (missingNote ? "\n" + missingNote : "")
   ].join("\n");
+
+  return {
+    text,
+    ideas: chosen,
+    meta: { brand, env, url, page, pageType, signals }
+  };
 }
+
 
 async function copyStrategistSuggestion() {
   const text = document.getElementById("strategistSuggestionText")?.textContent || "";
@@ -1257,8 +1690,8 @@ document.getElementById('strategistGenerate')?.addEventListener('click', async (
   const includeCustom = !!document.getElementById('strategistIncludeCustom')?.checked;
   const customText = includeCustom ? await loadCustomIdeaText() : '';
   const customIdeas = includeCustom ? parseCustomIdeas(customText) : [];
-  const suggestion = buildSuggestionsFromScan(strategistLast, { pageType, ideaCount, includeCustom, customIdeas });
-  setStrategistUi({ suggestion, note: "Ideas generated." });
+  const result = buildSuggestionsFromScan(strategistLast, { pageType, ideaCount, includeCustom, customIdeas });
+  setStrategistUi({ suggestion: result?.text || "", ideas: result?.ideas || [], note: "Ideas generated." });
 });
 
 document.getElementById('strategistCopy')?.addEventListener('click', async () => {

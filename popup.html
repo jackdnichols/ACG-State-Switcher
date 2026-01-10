@@ -92,13 +92,22 @@
         <div class="row-between">
           <h3>Target Strategist</h3>
           <div class="row" style="gap:8px;justify-content:flex-end">
-            <span id="strategistErrorPill" class="pill pill-warn" data-tooltip="">⚠ DATA MISSING</span>
+            <span id="strategistErrorPill" class="pill pill-warn hidden" data-tooltip="">⚠ DATA MISSING</span>
             <button id="strategistRefresh" class="btn-ghost" type="button" title="Rescan Page">↻</button>
           </div>
         </div>
 
         <div class="hint">
           Quote-focused idea generator for Adobe Target. Scans the active tab for <strong>digitalData</strong>, <strong>s.pageName</strong>, Web SDK, and Target signals.
+        </div>
+
+        <div class="status-row" id="strategistStatusRow" aria-label="Page status indicators">
+          <span id="pillDomain" class="pill pill-neutral">Domain</span>
+          <span id="pillDD" class="pill pill-neutral">digitalData</span>
+          <span id="pillS" class="pill pill-neutral">s.pageName</span>
+          <span id="pillWebSDK" class="pill pill-neutral">Web SDK</span>
+          <span id="pillTarget" class="pill pill-neutral">Target</span>
+          <span id="pillSelectors" class="pill pill-neutral">Selectors</span>
         </div>
 
         <div class="kv">
@@ -156,7 +165,8 @@
         </details>
 
         <div id="strategistSuggestion" class="suggestion">
-          <pre id="strategistSuggestionText"></pre>
+          <div id="strategistIdeaList" class="idea-list"></div>
+          <pre id="strategistSuggestionText" class="sr-only"></pre>
         </div>
 
         <div id="strategistNote" class="note"></div>
