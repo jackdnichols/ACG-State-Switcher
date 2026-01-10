@@ -8,20 +8,20 @@
 </head>
 <body>
   <header class="header">
-    <div class="brand">ACG Utilities</div>
+    <div class="brand" title="Quick utilities for AAA/ACG sites: state cookies, environment links, Target strategist, and an env badge.">ACG Utilities</div>
 
-    <div class="theme-switch" role="group" aria-label="Theme">
-      <button id="themeLight"  aria-pressed="false" type="button">Light</button>
-      <button id="themeDark"   aria-pressed="false" type="button">Dark</button>
-      <button id="themeSystem" aria-pressed="true"  type="button">System</button>
+    <div class="theme-switch" role="group" aria-label="Theme" title="Switch the popup theme only (does not affect websites).">
+      <button id="themeLight"  aria-pressed="false" type="button" title="Use a light theme in the popup">Light</button>
+      <button id="themeDark"   aria-pressed="false" type="button" title="Use a dark theme in the popup">Dark</button>
+      <button id="themeSystem" aria-pressed="true"  type="button" title="Follow your OS/browser theme">System</button>
     </div>
   </header>
 
   <nav class="tabs" aria-label="Sections">
-    <button class="tab" type="button" data-tab="state">State</button>
-    <button class="tab" type="button" data-tab="env">Links</button>
-    <button class="tab" type="button" data-tab="target">A/B Testing</button>
-    <button class="tab" type="button" data-tab="badge">Env Badge</button>
+    <button class="tab" type="button" data-tab="state" title="Set ACG state cookies on the active ACG tab">ACG State</button>
+    <button class="tab" type="button" data-tab="env" title="Open site links for Prod/Stage/QA/Dev">Links</button>
+    <button class="tab" type="button" data-tab="target" title="Generate quote-focused A/B test ideas for Adobe Target">A/B Testing</button>
+    <button class="tab" type="button" data-tab="badge" title="Configure the env badge on AEM Author pages">Env Badge</button>
   </nav>
 
   <main class="views">
@@ -30,10 +30,13 @@
          ===================== -->
     <section class="view" data-view="state">
       <section class="card">
-        <h3>ACG State</h3>
+        <div class="row-between">
+          <h3>ACG State</h3>
+          <span class="help" tabindex="0" role="img" aria-label="Help" title="Go to an ACG/AAA page, select a State and click Apply State Cookies. This sets the cookie values used by ACG for geo/state behavior on the active tab and refreshes the page.">?</span>
+        </div>
 
-        <label class="label" for="stateSelect">State cookie bundle</label>
-        <select id="stateSelect">
+        <label class="label" for="stateSelect" title="Chooses which state cookie bundle to apply on the active ACG tab.">State cookie bundle</label>
+        <select id="stateSelect" title="Pick the state you want the site to behave as.">
           <option>Colorado</option><option>Florida</option><option>Georgia</option><option>Illinois</option>
           <option>Indiana</option><option>Iowa</option><option>Michigan</option><option>Minnesota</option>
           <option>Nebraska</option><option>North Carolina</option><option>North Dakota</option>
@@ -41,7 +44,7 @@
         </select>
 
         <div class="spacer"></div>
-        <button id="applyBtn" type="button">Apply State Cookies</button>
+        <button id="applyBtn" type="button" title="Apply the selected state cookie bundle to the active tab.">Apply State Cookies</button>
         <div id="stateLockNote" class="hint" style="display:none">
           State cookies can only be applied when the active tab is on <strong>acg.aaa.com</strong> (or its subdomains).
         </div>
@@ -54,32 +57,38 @@
          ===================== -->
     <section class="view" data-view="env">
       <section class="card">
-        <h3>Environment</h3>
+        <div class="row-between">
+          <h3>Environment</h3>
+          <span class="help" tabindex="0" role="img" aria-label="Help" title="1) Pick an environment (Prod/Stage/QA/Dev). 2) Click a site chip (ACG/Meemic/Foundation) to open that site in a new tab for the chosen env.">?</span>
+        </div>
         <div class="hint">Pick an env then click a site.</div>
 
-        <div class="seg" id="envRow" role="listbox" aria-label="Environment">
-          <a href="#" data-env="production">Prod</a>
-          <a href="#" data-env="stage1">Stage</a>
-          <a href="#" data-env="qa1">QA</a>
-          <a href="#" data-env="dev1">Dev</a>
+        <div class="seg" id="envRow" role="listbox" aria-label="Environment" title="Select an environment. Your selection is used when opening links below.">
+          <a href="#" data-env="production" title="Production">Prod</a>
+          <a href="#" data-env="stage1" title="Stage">Stage</a>
+          <a href="#" data-env="qa1" title="QA">QA</a>
+          <a href="#" data-env="dev1" title="Dev">Dev</a>
         </div>
 
         <div class="spacer"></div>
         <div class="row">
-          <a class="chip" href="#" data-company="acg">ACG</a>
-          <a class="chip" href="#" data-company="meemic">Meemic</a>
-          <a class="chip" href="#" data-company="meemicfoundation">Foundation</a>
-          <a class="chip" href="#" id="authorLink">AEM Author</a>
+          <a class="chip" href="#" data-company="acg" title="Open ACG site for selected environment">ACG</a>
+          <a class="chip" href="#" data-company="meemic" title="Open Meemic site for selected environment">Meemic</a>
+          <a class="chip" href="#" data-company="meemicfoundation" title="Open Meemic Foundation site for selected environment">Foundation</a>
+          <a class="chip" href="#" id="authorLink" title="Open AEM Author for selected environment">AEM Author</a>
         </div>
       </section>
 
       <section class="card">
-        <h3>Other Links</h3>
+        <div class="row-between">
+          <h3>Other Links</h3>
+          <span class="help" tabindex="0" role="img" aria-label="Help" title="Handy shortcuts for Adobe/Tealium tools. Opens in a new tab.">?</span>
+        </div>
         <div class="row">
-          <a class="chip" href="https://experience.adobe.com/#/@aaaautoclubsouth/home" target="_blank" rel="noopener">Adobe Experience</a>
-          <a class="chip" href="https://experienceleague.adobe.com/tools/calculator/testcalculator.html" target="_blank" rel="noopener">Test Calculator</a>
-          <a class="chip" href="https://tealiumiq.com" target="_blank" rel="noopener">Tealium IQ</a>
-          <a class="chip" href="https://university.tealium.com/learn/home" target="_blank" rel="noopener">Tealium U</a>
+          <a class="chip" href="https://experience.adobe.com/#/@aaaautoclubsouth/home" target="_blank" rel="noopener" title="Open Adobe Experience Cloud">Adobe Experience</a>
+          <a class="chip" href="https://experienceleague.adobe.com/tools/calculator/testcalculator.html" target="_blank" rel="noopener" title="Open Adobe Target test calculator">Test Calculator</a>
+          <a class="chip" href="https://tealiumiq.com" target="_blank" rel="noopener" title="Open Tealium iQ Tag Management">Tealium IQ</a>
+          <a class="chip" href="https://university.tealium.com/learn/home" target="_blank" rel="noopener" title="Open Tealium University">Tealium U</a>
         </div>
       </section>
     </section>
@@ -90,35 +99,38 @@
     <section class="view" data-view="target">
       <section class="card" id="strategistCard">
         <div class="row-between">
-          <h3>Target Strategist</h3>
+          <div class="row" style="gap:8px;align-items:center">
+            <h3 style="margin:0">Target Strategist</h3>
+            <span class="help" tabindex="0" role="img" aria-label="Help" title="Generate Adobe Target ideas for the current page. Click the ↻ button to rescan. Each card includes Control (A) and Variant (B). Click a card's Copy button to copy to the clipboard.">?</span>
+          </div>
           <div class="row" style="gap:8px;justify-content:flex-end">
-            <span id="strategistErrorPill" class="pill pill-warn hidden" data-tooltip="">⚠ DATA MISSING</span>
-            <button id="strategistRefresh" class="btn-ghost" type="button" title="Rescan Page">↻</button>
+            <span id="strategistErrorPill" class="pill pill-warn hidden" data-tooltip="" title="">⚠ DATA MISSING</span>
+            <button id="strategistRefresh" class="btn-ghost" type="button" title="Rescan the active page for Adobe signals + DOM hints">↻</button>
           </div>
         </div>
 
-        <div class="hint">
+        <div class="hint" title="This reads the active tab and generates Target-ready A/B test ideas. It does not run any AI model by default; it uses templates filled with page context.">
           Quote-focused idea generator for Adobe Target. Scans the active tab for <strong>digitalData</strong>, <strong>s.pageName</strong>, Web SDK, and Target signals.
         </div>
 
-        <div class="status-row" id="strategistStatusRow" aria-label="Page status indicators">
-          <span id="pillDomain" class="pill pill-neutral">Domain</span>
-          <span id="pillDD" class="pill pill-neutral">digitalData</span>
-          <span id="pillS" class="pill pill-neutral">s.pageName</span>
-          <span id="pillWebSDK" class="pill pill-neutral">Web SDK</span>
-          <span id="pillTarget" class="pill pill-neutral">Target</span>
-          <span id="pillSelectors" class="pill pill-neutral">Selectors</span>
-          <span id="pillHealth" class="pill pill-neutral">Health</span>
+        <div class="status-row" id="strategistStatusRow" aria-label="Page status indicators" title="Click any pill to copy its details to your clipboard.">
+          <span id="pillDomain" class="pill pill-neutral" title="">Domain</span>
+          <span id="pillDD" class="pill pill-neutral" title="">digitalData</span>
+          <span id="pillS" class="pill pill-neutral" title="">s.pageName</span>
+          <span id="pillWebSDK" class="pill pill-neutral" title="">Web SDK</span>
+          <span id="pillTarget" class="pill pill-neutral" title="">Target</span>
+          <span id="pillSelectors" class="pill pill-neutral" title="">Selectors</span>
+          <span id="pillHealth" class="pill pill-neutral" title="">Health</span>
         </div>
 
         <div class="kv">
           <div>
-            <div class="label">Detected page name</div>
+            <div class="label" title="If available, pulled from s.pageName or digitalData.">Detected page name</div>
             <div id="strategistPageName" class="val">Scanning...</div>
           </div>
           <div>
-            <div class="label">Page type</div>
-            <select id="strategistPageType">
+            <div class="label" title="Used to choose the idea templates. Quote is the default.">Page type</div>
+            <select id="strategistPageType" title="Choose the template pack to generate ideas from.">
               <option value="quote" selected>Quote</option>
               <option value="billing">Billing</option>
               <option value="donate">Donate</option>
@@ -130,12 +142,12 @@
 
         <div class="kv">
           <div>
-            <div class="label">How many ideas</div>
-            <input id="strategistIdeaCount" type="number" min="3" max="50" value="18" />
+            <div class="label" title="How many idea cards to generate.">How many ideas</div>
+            <input id="strategistIdeaCount" type="number" min="3" max="50" value="18" title="Generate this many idea cards." />
           </div>
           <div>
-            <div class="label">Include custom ideas</div>
-            <label class="toggle">
+            <div class="label" title="If checked, includes your saved custom ideas in the output.">Include custom ideas</div>
+            <label class="toggle" title="When enabled, your saved custom ideas are merged into the generated bundle.">
               <input id="strategistIncludeCustom" type="checkbox" checked />
               <span>Use my saved ideas</span>
             </label>
@@ -143,12 +155,12 @@
         </div>
 
         <div class="btn-row">
-          <button id="strategistGenerate" type="button">Generate Ideas</button>
-          <button id="strategistCopy" class="btn-ghost" type="button">Copy</button>
+          <button id="strategistGenerate" type="button" title="Generate Target-ready A/B test ideas for the active tab">Generate Ideas</button>
+          <button id="strategistCopy" class="btn-ghost" type="button" title="Copy the full generated bundle to your clipboard">Copy</button>
         </div>
 
         <details class="details">
-          <summary>Custom ideas (paste from your other ChatGPT window)</summary>
+          <summary title="Paste your own ideas here so they show up in future bundles">Custom ideas (paste from your other ChatGPT window)</summary>
           <div class="hint" style="margin-top:8px">
             Paste either:
             <ul class="mini">
@@ -157,10 +169,10 @@
             </ul>
             Click <strong>Save</strong>. These will be merged into future bundles.
           </div>
-          <textarea id="strategistCustomInput" rows="8" placeholder="Example:\nTry CTA label 'Get a Quote' vs 'See My Price'\nAdd trust badge near quote form\n..."></textarea>
+          <textarea id="strategistCustomInput" rows="8" title="Paste one idea per line, or a JSON array of idea objects." placeholder="Example:\nTry CTA label 'Get a Quote' vs 'See My Price'\nAdd trust badge near quote form\n..."></textarea>
           <div class="btn-row" style="margin-top:10px">
-            <button id="strategistCustomSave" type="button">Save</button>
-            <button id="strategistCustomClear" class="btn-ghost" type="button">Clear</button>
+            <button id="strategistCustomSave" type="button" title="Save these custom ideas for future bundles">Save</button>
+            <button id="strategistCustomClear" class="btn-ghost" type="button" title="Clear the custom ideas text box (does not delete saved ideas unless you Save after clearing)">Clear</button>
           </div>
           <div id="strategistCustomStatus" class="note"></div>
         </details>
@@ -179,38 +191,41 @@
          ===================== -->
     <section class="view" data-view="badge">
       <section class="card">
-        <h3>Badge Options</h3>
+        <div class="row-between">
+          <h3>Badge Options</h3>
+          <span class="help" tabindex="0" role="img" aria-label="Help" title="Shows an environment badge on AEM Author pages. Corner/Anchor modes remember your preset values. Free mode lets you drag and saves per URL. Dragging the badge automatically saves.">?</span>
+        </div>
         <div class="hint">Controls the little env badge on AEM Author pages.</div>
 
-        <div class="row" role="radiogroup" aria-label="Badge mode">
-          <label class="chip"><input type="radio" name="badgeMode" value="corner"> Corner</label>
-          <label class="chip"><input type="radio" name="badgeMode" value="selector"> Anchor to selector</label>
-          <label class="chip"><input type="radio" name="badgeMode" value="free"> Free (drag; auto-save per URL)</label>
+        <div class="row" role="radiogroup" aria-label="Badge mode" title="Choose how the badge is positioned.">
+          <label class="chip" title="Pin the badge to a screen corner using offsets"><input type="radio" name="badgeMode" value="corner"> Corner</label>
+          <label class="chip" title="Attach badge near a specific element using a CSS selector"><input type="radio" name="badgeMode" value="selector"> Anchor to selector</label>
+          <label class="chip" title="Drag anywhere. Saves position per URL when you drop the badge"><input type="radio" name="badgeMode" value="free"> Free (drag; auto-save per URL)</label>
         </div>
 
         <div class="row">
-          <select id="badgeCorner">
+          <select id="badgeCorner" title="Which corner to use when in Corner mode">
             <option value="top-left">Top Left</option>
             <option value="top-right">Top Right</option>
             <option value="bottom-left">Bottom Left</option>
             <option value="bottom-right">Bottom Right</option>
           </select>
-          <input id="badgeAnchor" value="#env-labels" placeholder="CSS selector (e.g. #env-labels)" />
+          <input id="badgeAnchor" value="#env-labels" title="CSS selector used in Anchor mode (example: #env-labels or .some-class)" placeholder="CSS selector (e.g. #env-labels)" />
         </div>
 
-        <div class="row split">
-          <input id="badgeOffsetX" type="number" value="10" placeholder="offsetX" />
-          <input id="badgeOffsetY" type="number" value="32" placeholder="offsetY" />
+        <div class="row split" title="Offsets are in pixels. Positive X moves right; positive Y moves down.">
+          <input id="badgeOffsetX" type="number" value="10" placeholder="offsetX" title="Horizontal offset in pixels" />
+          <input id="badgeOffsetY" type="number" value="32" placeholder="offsetY" title="Vertical offset in pixels" />
         </div>
 
         <div class="spacer"></div>
-        <button id="badgeReset" class="btn-ghost" type="button">Reset position (this URL)</button>
+        <button id="badgeReset" class="btn-ghost" type="button" title="Reset the saved badge position for the current URL">Reset position (this URL)</button>
         <div id="stateMsg2" class="note"></div>
       </section>
     </section>
   </main>
 
-  <footer class="disclaimer">
+  <footer class="disclaimer" title="Extension disclaimer">
     Not affiliated with AAA or its subsidiaries. Author: Jack Nichols
   </footer>
 

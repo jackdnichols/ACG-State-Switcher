@@ -209,6 +209,30 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+.help {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--chip-border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--muted);
+  cursor: help;
+  user-select: none;
+}
+.help:hover {
+  border-color: var(--brand);
+  color: var(--fg);
+  background: var(--brand-weak);
+}
+.help:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .row.split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 .chip {
