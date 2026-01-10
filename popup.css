@@ -272,19 +272,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .pill-ok { background: var(--success-bg); border: 1px solid var(--success-br); color: #2ea043; }
 .pill-info { background: var(--brand-weak); border: 1px solid var(--brand); color: var(--brand); }
 .pill-neutral { background: transparent; border: 1px solid var(--chip-border); color: var(--muted); }
-.pill:hover::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: 120%;
-  right: 0;
-  width: 240px;
-  background: rgba(0,0,0,.85);
-  color: #fff;
-  padding: 10px;
-  border-radius: 10px;
-  z-index: 999;
-  white-space: pre-wrap;
-  box-shadow: 0 8px 18px rgba(0,0,0,.25);
+.pill:hover::after{
+  /* Disabled: CSS tooltips are clipped by the extension popup window.
+     We use native tooltips (title attribute) instead, which render outside the popup. */
+  content: none !important;
+  display: none !important;
 }
 .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .suggestion { display: none; margin-top: 12px; }

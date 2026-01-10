@@ -114,11 +114,31 @@ function detectEnv(hostname) {
 
 function setPill(el, state, text, tooltip) {
   if (!el) return;
+
   el.classList.remove("pill-ok", "pill-warn", "pill-info", "pill-neutral", "hidden");
-  const cls = state === "ok" ? "pill-ok" : state === "warn" ? "pill-warn" : state === "info" ? "pill-info" : "pill-neutral";
+
+  const cls =
+    state === "ok" ? "pill-ok" :
+    state === "warn" ? "pill-warn" :
+    state === "info" ? "pill-info" :
+    "pill-neutral";
+
   el.classList.add(cls);
   el.textContent = text || "";
-  if (tooltip != null) el.setAttribute("data-tooltip", tooltip);
+
+  // Keep data-tooltip as the single source of truth (also used for native hover tooltips)
+  const tip = (tooltip == null) ? "" : String(tooltip);
+
+  el.setAttribute("data-tooltip", tip);
+
+  // Native tooltip is not clipped by the extension popup window (unlike CSS ::after tooltips)
+  if (tip.trim()) {
+    el.setAttribute("title", tip);
+    el.setAttribute("aria-label", `${(text || "").trim()} — ${tip}`.trim());
+  } else {
+    el.removeAttribute("title");
+    el.setAttribute("aria-label", (text || "").trim());
+  }
 }
 
 function updateStrategistStatusPills(s) {
@@ -128,6 +148,7 @@ function updateStrategistStatusPills(s) {
   const $web = document.getElementById("pillWebSDK");
   const $tgt = document.getElementById("pillTarget");
   const $sel = document.getElementById("pillSelectors");
+  const $health = document.getElementById("pillHealth");
 
   if (!s) {
     setPill($domain, "neutral", "Domain", "");
@@ -136,6 +157,7 @@ function updateStrategistStatusPills(s) {
     setPill($web, "neutral", "Web SDK", "");
     setPill($tgt, "neutral", "Target", "");
     setPill($sel, "neutral", "Selectors", "");
+    setPill($health, "neutral", "Health", "");
     return;
   }
 
@@ -161,6 +183,48 @@ function updateStrategistStatusPills(s) {
     s.formSelector ? `Form: ${s.formSelector}` : "Form: (none)"
   ].join("\n");
   setPill($sel, hasSelectors ? "ok" : "warn", hasSelectors ? "Selectors ✓" : "Selectors ✗", selTip);
+
+  const h = s.health || {};
+  const brokenImages = Number.isFinite(+h.brokenImages) ? +h.brokenImages : 0;
+  const totalImages = Number.isFinite(+h.imagesTotal) ? +h.imagesTotal : 0;
+  const brokenLinks = Number.isFinite(+h.brokenLinks) ? +h.brokenLinks : 0;
+  const totalLinks = Number.isFinite(+h.linksTotal) ? +h.linksTotal : 0;
+
+  const healthOk = brokenImages === 0 && brokenLinks === 0;
+  const healthText = healthOk ? "Health ✓" : `Health ⚠ ${brokenImages}img/${brokenLinks}lnk`;
+  const tipLines = [
+    `Images: ${brokenImages} broken of ${totalImages}`,
+    `Links: ${brokenLinks} suspicious of ${totalLinks} (empty/#/javascript)`
+  ];
+  if (Array.isArray(h.brokenImageSamples) && h.brokenImageSamples.length) {
+    tipLines.push("Broken image samples:");
+    for (const x of h.brokenImageSamples.slice(0,5)) tipLines.push(`- ${x}`);
+  }
+  if (Array.isArray(h.brokenLinkSamples) && h.brokenLinkSamples.length) {
+    tipLines.push("Suspicious link samples:");
+    for (const x of h.brokenLinkSamples.slice(0,5)) tipLines.push(`- ${x}`);
+  }
+  setPill($health, healthOk ? "ok" : "warn", healthText, tipLines.join("\n"));
+}
+
+
+
+
+
+
+function oneChangeText(raw) {
+  const t0 = String(raw || '').trim();
+  if (!t0) return '';
+  let t = t0;
+  // Prefer a single clear change: keep first clause/sentence if it looks like multiple changes.
+  if (t.includes(';')) t = t.split(';')[0].trim();
+  if (t.includes(' + ')) t = t.split(' + ')[0].trim();
+  if (t.length > 120 && /\s+and\s+/i.test(t)) t = t.split(/\s+and\s+/i)[0].trim();
+  if (t.length > 180) {
+    const first = t.split(/(?<=[.!?])\s+/)[0].trim();
+    if (first.length >= 24) t = first;
+  }
+  return t;
 }
 
 function renderStrategistIdeas(ideas) {
@@ -235,8 +299,8 @@ function renderStrategistIdeas(ideas) {
     }
 
     const test = i.change || i.test || i.title;
-    const a = i.a || i.variantA;
-    const b = i.b || i.variantB;
+    const a = i.a || i.variantA || "As-is (current experience).";
+    const b = i.b || i.variantB || i.change || "";
     const why = i.why || i.hypothesis;
     const measure = i.kpi || i.measure;
     const guard = i.guardrails || i.guardrail;
@@ -244,8 +308,8 @@ function renderStrategistIdeas(ideas) {
     addKV("Placement", i.placement);
     addKV("Test", test);
     if (why && String(why).length <= 140) addKV("Why", why);
-    addKV("A", a);
-    addKV("B", b);
+    addKV("Control (A)", a);
+    addKV("Variant (B)", oneChangeText(b));
     addKV("Measure", measure);
     if (guard) addKV("Guardrail", guard);
 
@@ -263,8 +327,8 @@ function formatIdeaForClipboard(i, idx) {
 
   const test = i?.change || i?.test || title;
   const why = i?.why || i?.hypothesis || "";
-  const a = i?.a || i?.variantA || "";
-  const b = i?.b || i?.variantB || "";
+  const a = i?.a || i?.variantA || "As-is (current experience).";
+  const b = i?.b || i?.variantB || i?.change || "";
   const measure = i?.kpi || i?.measure || "";
   const guard = i?.guardrails || i?.guardrail || "";
 
@@ -275,8 +339,8 @@ function formatIdeaForClipboard(i, idx) {
     placement ? `Placement: ${placement}` : "",
     test ? `Test: ${test}` : "",
     (why && String(why).length <= 200) ? `Why: ${why}` : "",
-    a ? `A: ${a}` : "",
-    b ? `B: ${b}` : "",
+    a ? `Control (A): ${a}` : "",
+    b ? `Variant (B): ${oneChangeText(b)}` : "",
     measure ? `Measure: ${measure}` : "",
     guard ? `Guardrail: ${guard}` : ""
   ].filter(Boolean).join("\n");
@@ -314,7 +378,12 @@ function setStrategistUi({ pageName, tooltip, showPill, note, suggestion, ideas 
 
   if ($pill) {
     $pill.classList.toggle("hidden", !showPill);
-    if (tooltip != null) $pill.setAttribute("data-tooltip", tooltip);
+    if (tooltip != null) {
+      $pill.setAttribute("data-tooltip", tooltip);
+      const tip = String(tooltip || "");
+      if (tip.trim()) $pill.setAttribute("title", tip);
+      else $pill.removeAttribute("title");
+    }
   }
 
   if ($note && note != null) $note.textContent = note;
@@ -476,6 +545,41 @@ async function scanStrategist() {
         const firstForm = document.querySelector('form');
         const formSelector = firstForm ? uniqueSelector(firstForm) : '';
 
+        // Lightweight page health: broken images + suspicious links
+        const imgs = Array.from(document.images || []);
+        let brokenImages = 0;
+        const brokenImageSamples = [];
+        for (const img of imgs) {
+          const src = (img.currentSrc || img.src || img.getAttribute('src') || '').trim();
+          const ok = !!src && img.complete && (img.naturalWidth || 0) > 0;
+          if (!ok) {
+            brokenImages++;
+            if (brokenImageSamples.length < 5) brokenImageSamples.push(src || '(no src)');
+          }
+        }
+
+        const links = Array.from(document.querySelectorAll('a'));
+        let brokenLinks = 0;
+        const brokenLinkSamples = [];
+        for (const a of links) {
+          const href = (a.getAttribute('href') || '').trim();
+          const low = href.toLowerCase();
+          const suspicious = (!href || href === '#' || low.startsWith('javascript:'));
+          if (suspicious) {
+            brokenLinks++;
+            if (brokenLinkSamples.length < 5) brokenLinkSamples.push(href || '(empty)');
+          }
+        }
+
+        const health = {
+          imagesTotal: imgs.length,
+          brokenImages,
+          brokenImageSamples,
+          linksTotal: links.length,
+          brokenLinks,
+          brokenLinkSamples
+        };
+
         return {
           pageName,
           pathname,
@@ -486,6 +590,7 @@ async function scanStrategist() {
           ctaSelector: cta.selector,
           formCount,
           formSelector,
+          health,
           dd,
           sObj,
           alloy,
@@ -512,6 +617,7 @@ async function scanStrategist() {
       ctaSelector: (data.ctaSelector || ""),
       formCount: Number.isFinite(+data.formCount) ? +data.formCount : 0,
       formSelector: (data.formSelector || ""),
+      health: (data.health || {}),
       hasDD: data.dd,
       hasS: data.sObj,
       hasAlloy: data.alloy,
@@ -635,6 +741,13 @@ function buildSuggestionsFromScan(s, opts = {}) {
     `Target: ${s.hasAt ? "✓" : "?"}`
   ].join(" | ");
 
+  const h = s.health || {};
+  const brokenImages = Number.isFinite(+h.brokenImages) ? +h.brokenImages : 0;
+  const brokenLinks = Number.isFinite(+h.brokenLinks) ? +h.brokenLinks : 0;
+  const healthLine = (brokenImages === 0 && brokenLinks === 0)
+    ? 'Health: OK (no broken images or suspicious links detected)'
+    : `Health: ⚠ ${brokenImages} broken image(s), ${brokenLinks} suspicious link(s)`;
+
   const hay = `${page} ${pathname} ${h1} ${ctaText}`.toLowerCase();
   const inferredQuote = /quote|get\s*a\s*quote|start\s*quote|auto\s*quote|home\s*quote|bundle|insurance/.test(hay);
   const isBilling = /pay|billing|payment|autopay|paperless|invoice/.test(hay);
@@ -671,8 +784,8 @@ function buildSuggestionsFromScan(s, opts = {}) {
 
     const test = i.change || i.test || title;
     const why = i.why || i.hypothesis || '';
-    const a = i.a || i.variantA || 'Current experience.';
-    const b = i.b || i.variantB || 'Proposed experience.';
+    const a = i.a || i.variantA || 'As-is (Control).';
+    const b = i.b || i.variantB || i.change || 'Proposed (Variant).';
     const measure = i.kpi || i.measure || 'Primary action rate';
     const guard = i.guardrails || i.guardrail || '';
 
@@ -682,8 +795,8 @@ function buildSuggestionsFromScan(s, opts = {}) {
       placement ? `  Placement: ${placement}` : '',
       `  Test: ${test}`,
       (why && String(why).length <= 140) ? `  Why: ${why}` : '',
-      `  A: ${a}`,
-      `  B: ${b}`,
+      `  Control (A): ${a}`,
+      `  Variant (B): ${oneChangeText(b)}`,
       `  Measure: ${measure}`,
       guard ? `  Guardrail: ${guard}` : ''
     ].filter(Boolean).join("\n");
@@ -1479,6 +1592,8 @@ function buildSuggestionsFromScan(s, opts = {}) {
     `Page: ${page || "(unknown)"}`,
     `Page type: ${pageType}`,
     `Signals: ${signals}`,
+    healthLine,
+    healthLine,
     (pathname ? `Path: ${pathname}` : ""),
     (h1 ? `H1: ${h1}` : ""),
     (ctaText ? `Primary CTA: ${ctaText}` : ""),

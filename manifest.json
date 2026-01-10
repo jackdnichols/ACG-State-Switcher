@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "State Switcher for acg.aaa.com",
-  "version": "1.67",
-  "description": "Environment quick-links (Author-only badge) + ACG State cookie switcher + Target Strategist (more specific quote ideas + concise cards + one-click copy).",
+  "version": "1.69",
+  "description": "Environment quick-links (Author-only badge) + ACG State cookie switcher + Target Strategist (Control/Variant formatting + page health indicator).",
   "permissions": [
     "storage",
     "tabs",
