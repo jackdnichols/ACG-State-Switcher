@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "State Switcher for acg.aaa.com",
-  "version": "1.76",
-  "description": "Environment quick-links (Author-only badge) + ACG State cookie switcher + current state indicator + Target Strategist (paste-ready Variant copy + page health + pill tooltip/copy). Adds help tooltips across all popup sections.",
+  "version": "1.77",
+  "description": "Environment quick-links (Author-only badge) + ACG State cookie switcher + current state indicator + Target Strategist (paste-ready Variant copy + page health + pill tooltip/copy). Adds help tooltips across all popup sections. Wider popup to reduce clipped UI.",
   "permissions": [
     "storage",
     "tabs",

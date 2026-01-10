@@ -59,6 +59,7 @@ function setCurrentStatePill(code) {
   el.classList.remove('pill-ok', 'pill-warn', 'pill-info', 'pill-neutral');
   el.classList.add(c ? 'pill-info' : 'pill-neutral');
 
+  // Match popup wording: "Current State: XX"
   el.textContent = c ? `Current State: ${c}` : 'Current State: —';
   const tip = c ? `AEM.state = ${c}${name ? ` (${name})` : ''}` : 'No AEM.state cookie found on the active tab.';
   el.setAttribute('title', tip);
