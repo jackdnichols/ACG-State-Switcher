@@ -295,6 +295,20 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   margin-top: 10px;
 }
 
+/* Make status pills clickable (copy-to-clipboard) */
+#strategistStatusRow .pill {
+  cursor: pointer;
+}
+
+#strategistStatusRow .pill:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+#strategistStatusRow .pill.pill-copied {
+  box-shadow: 0 0 0 2px var(--brand);
+}
+
 /* Suggestion cards */
 .idea-list {
   display: grid;

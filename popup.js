@@ -207,6 +207,53 @@ function updateStrategistStatusPills(s) {
   setPill($health, healthOk ? "ok" : "warn", healthText, tipLines.join("\n"));
 }
 
+// Allow clicking a status pill to copy its details to clipboard.
+// This is useful because pill tooltips can be long (selectors, health samples, etc.).
+function wireStrategistPillCopy() {
+  const row = document.getElementById('strategistStatusRow');
+  if (!row) return;
+
+  const pills = Array.from(row.querySelectorAll('.pill'));
+  for (const pill of pills) {
+    // Make it keyboard accessible.
+    pill.setAttribute('role', 'button');
+    pill.setAttribute('tabindex', '0');
+
+    const doCopy = async () => {
+      const label = (pill.textContent || '').trim();
+      const tip = (pill.getAttribute('data-tooltip') || pill.getAttribute('title') || '').trim();
+      const text = tip ? `${label}\n${tip}` : label;
+      if (!text.trim()) return;
+
+      const note = document.getElementById('strategistNote');
+      try {
+        await navigator.clipboard.writeText(text);
+
+        // Visual ping
+        pill.classList.add('pill-copied');
+        setTimeout(() => pill.classList.remove('pill-copied'), 650);
+
+        if (note) note.textContent = `Copied pill: ${label || 'Status'}`;
+      } catch (e) {
+        console.error('Pill copy failed:', e);
+        if (note) note.textContent = 'Copy failed. Your browser may be blocking clipboard access in popups.';
+      }
+    };
+
+    pill.addEventListener('click', (e) => {
+      e.preventDefault();
+      doCopy();
+    });
+
+    pill.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        doCopy();
+      }
+    });
+  }
+}
+
 
 
 
@@ -1816,6 +1863,9 @@ document.getElementById('strategistCopy')?.addEventListener('click', async () =>
 /* ---------- Init ---------- */
 (async function init(){
   await initTabs();
+
+  // Enable copy-to-clipboard on strategist status pills.
+  wireStrategistPillCopy();
 
   // Gate the State UI based on active tab domain
   const tab = await getActiveTab();
