@@ -20,7 +20,7 @@
   <nav class="tabs" aria-label="Sections">
     <button class="tab" type="button" data-tab="state" title="Set ACG state cookies on the active ACG tab">ACG State</button>
     <button class="tab" type="button" data-tab="env" title="Open site links for Prod/Stage/QA/Dev">Links</button>
-    <button class="tab" type="button" data-tab="target" title="Generate quote-focused A/B test ideas for Adobe Target">A/B Testing</button>
+    <button class="tab" type="button" data-tab="target" title="Generate A/B test ideas for Adobe Target">A/B Testing</button>
     <button class="tab" type="button" data-tab="badge" title="Configure the env badge on AEM Author pages">Env Badge</button>
   </nav>
 
@@ -31,7 +31,10 @@
     <section class="view" data-view="state">
       <section class="card">
         <div class="row-between">
-          <h3>ACG State</h3>
+          <div class="row" style="gap:10px;align-items:center">
+            <h3 style="margin:0">ACG State</h3>
+            <span id="currentStatePill" class="pill pill-neutral" title="Reads the current state from the AEM.state cookie on the active ACG tab.">Current State: —</span>
+          </div>
           <span class="help" tabindex="0" role="img" aria-label="Help" title="Go to an ACG/AAA page, select a State and click Apply State Cookies. This sets the cookie values used by ACG for geo/state behavior on the active tab and refreshes the page.">?</span>
         </div>
 
@@ -101,7 +104,7 @@
         <div class="row-between">
           <div class="row" style="gap:8px;align-items:center">
             <h3 style="margin:0">Target Strategist</h3>
-            <span class="help" tabindex="0" role="img" aria-label="Help" title="Generate Adobe Target ideas for the current page. Click the ↻ button to rescan. Each card includes Control (A) and Variant (B). Click a card's Copy button to copy to the clipboard.">?</span>
+            <span class="help" tabindex="0" role="img" aria-label="Help" title="Generate Adobe Target ideas for the current page. Click the ↻ button to rescan. Click Generate Ideas to create a bundle. Each card includes Control (A) and Variant (B) with paste-ready copy when applicable. Click a card's Copy button to copy just that idea.">?</span>
           </div>
           <div class="row" style="gap:8px;justify-content:flex-end">
             <span id="strategistErrorPill" class="pill pill-warn hidden" data-tooltip="" title="">⚠ DATA MISSING</span>
@@ -110,7 +113,7 @@
         </div>
 
         <div class="hint" title="This reads the active tab and generates Target-ready A/B test ideas. It does not run any AI model by default; it uses templates filled with page context.">
-          Quote-focused idea generator for Adobe Target. Scans the active tab for <strong>digitalData</strong>, <strong>s.pageName</strong>, Web SDK, and Target signals.
+          Idea generator for Adobe Target. Scans the active tab for <strong>digitalData</strong>, <strong>s.pageName</strong>, Web SDK, and Target signals.
         </div>
 
         <div class="status-row" id="strategistStatusRow" aria-label="Page status indicators" title="Click any pill to copy its details to your clipboard.">
@@ -160,7 +163,7 @@
         </div>
 
         <details class="details">
-          <summary title="Paste your own ideas here so they show up in future bundles">Custom ideas (paste from your other ChatGPT window)</summary>
+          <summary title="Paste your own ideas here so they show up in future bundles">Custom ideas</summary>
           <div class="hint" style="margin-top:8px">
             Paste either:
             <ul class="mini">
@@ -193,7 +196,7 @@
       <section class="card">
         <div class="row-between">
           <h3>Badge Options</h3>
-          <span class="help" tabindex="0" role="img" aria-label="Help" title="Shows an environment badge on AEM Author pages. Corner/Anchor modes remember your preset values. Free mode lets you drag and saves per URL. Dragging the badge automatically saves.">?</span>
+          <span class="help" tabindex="0" role="img" aria-label="Help" title="Shows a small environment badge on AEM Author pages. Corner/Anchor modes remember your preset values. Free mode lets you drag and saves per URL. Dragging the badge automatically saves.">?</span>
         </div>
         <div class="hint">Controls the little env badge on AEM Author pages.</div>
 

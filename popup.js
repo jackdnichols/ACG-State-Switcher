@@ -30,6 +30,67 @@ function setStateControlsEnabled(enabled) {
 	if (note) note.style.display = enabled ? 'none' : 'block';
 }
 
+// --- Current State indicator (reads AEM.state cookie) ---
+const STATE_CODE_TO_NAME = {
+  CO: "Colorado",
+  FL: "Florida",
+  GA: "Georgia",
+  IL: "Illinois",
+  IN: "Indiana",
+  IA: "Iowa",
+  MI: "Michigan",
+  MN: "Minnesota",
+  NE: "Nebraska",
+  NC: "North Carolina",
+  ND: "North Dakota",
+  PR: "Puerto Rico",
+  SC: "South Carolina",
+  TN: "Tennessee",
+  WI: "Wisconsin"
+};
+
+function setCurrentStatePill(code) {
+  const el = document.getElementById('currentStatePill');
+  if (!el) return;
+
+  const c = (code || '').toString().trim().toUpperCase();
+  const name = STATE_CODE_TO_NAME[c] || "";
+
+  el.classList.remove('pill-ok', 'pill-warn', 'pill-info', 'pill-neutral');
+  el.classList.add(c ? 'pill-info' : 'pill-neutral');
+
+  el.textContent = c ? `Current State: ${c}` : 'Current State: —';
+  const tip = c ? `AEM.state = ${c}${name ? ` (${name})` : ''}` : 'No AEM.state cookie found on the active tab.';
+  el.setAttribute('title', tip);
+  el.setAttribute('aria-label', tip);
+
+  // Helpful: pre-select the dropdown to match the current cookie (does not apply anything).
+  if (c && name) {
+    const sel = document.getElementById('stateSelect');
+    if (sel && Array.from(sel.options).some(o => o.value === name)) {
+      sel.value = name;
+    }
+  }
+}
+
+async function readCurrentStateFromCookies(tabUrl) {
+  // Most reliable: ask for the cookie using the active tab URL (domain matching is handled by Chrome).
+  // Fallback to a stable ACG URL if tabUrl is missing.
+  const urlsToTry = [];
+  if (tabUrl) urlsToTry.push(tabUrl);
+  urlsToTry.push('https://www.acg.aaa.com/');
+  urlsToTry.push('https://aaa.com/');
+
+  for (const u of urlsToTry) {
+    try {
+      const c = await chrome.cookies.get({ url: u, name: 'AEM.state' });
+      const val = (c && c.value) ? String(c.value).trim() : '';
+      if (val) return val;
+    } catch { /* ignore */ }
+  }
+  return '';
+}
+
 /* ---------- Apply Cookies ---------- */
 const DOMAIN_ALLOWLIST = ["aaa.com", "acg.aaa.com", "meemic.com", "meemicfoundation.org"];
 function targetUrlForCookie(c){const p=(c.path&&String(c.path))||"/";if(c.hostOnly&&c.domain){const h=String(c.domain).replace(/^\./,"");return `https://${h}${p.startsWith("/")?p:`/${p}`}`;}return `https://www.acg.aaa.com${p.startsWith("/")?p:`/${p}`}`;}
@@ -2253,6 +2314,15 @@ document.getElementById('strategistCopy')?.addEventListener('click', async () =>
   const tab = await getActiveTab();
   const allowed = !!tab?.url && isAcgAaaHost(tab.url);
   setStateControlsEnabled(allowed);
+
+  // Show the currently active state (if we have one) from the AEM.state cookie.
+  // This is helpful when you open the popup and want to confirm what state you're already in.
+  try {
+    const code = await readCurrentStateFromCookies(tab?.url);
+    setCurrentStatePill(code);
+  } catch {
+    setCurrentStatePill('');
+  }
 
   try{const stored=await chrome.storage.sync.get('selectedEnv');currentEnv=stored?.['selectedEnv']||'qa1';}
   catch{currentEnv='qa1';}
