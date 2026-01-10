@@ -185,26 +185,70 @@ function updateStrategistStatusPills(s) {
   setPill($sel, hasSelectors ? "ok" : "warn", hasSelectors ? "Selectors ✓" : "Selectors ✗", selTip);
 
   const h = s.health || {};
-  const brokenImages = Number.isFinite(+h.brokenImages) ? +h.brokenImages : 0;
-  const totalImages = Number.isFinite(+h.imagesTotal) ? +h.imagesTotal : 0;
-  const brokenLinks = Number.isFinite(+h.brokenLinks) ? +h.brokenLinks : 0;
-  const totalLinks = Number.isFinite(+h.linksTotal) ? +h.linksTotal : 0;
-
-  const healthOk = brokenImages === 0 && brokenLinks === 0;
-  const healthText = healthOk ? "Health ✓" : `Health ⚠ ${brokenImages}img/${brokenLinks}lnk`;
-  const tipLines = [
-    `Images: ${brokenImages} broken of ${totalImages}`,
-    `Links: ${brokenLinks} suspicious of ${totalLinks} (empty/#/javascript)`
-  ];
-  if (Array.isArray(h.brokenImageSamples) && h.brokenImageSamples.length) {
-    tipLines.push("Broken image samples:");
-    for (const x of h.brokenImageSamples.slice(0,5)) tipLines.push(`- ${x}`);
-  }
-  if (Array.isArray(h.brokenLinkSamples) && h.brokenLinkSamples.length) {
-    tipLines.push("Suspicious link samples:");
-    for (const x of h.brokenLinkSamples.slice(0,5)) tipLines.push(`- ${x}`);
-  }
-  setPill($health, healthOk ? "ok" : "warn", healthText, tipLines.join("\n"));
+  
+    const brokenImages = Number.isFinite(+h.brokenImages) ? +h.brokenImages : 0;
+    const totalImages = Number.isFinite(+h.imagesTotal) ? +h.imagesTotal : 0;
+  
+    const placeholderLinks = Number.isFinite(+h.placeholderLinks) ? +h.placeholderLinks : 0;
+    const javascriptLinks = Number.isFinite(+h.javascriptLinks) ? +h.javascriptLinks : 0;
+    const missingAnchorLinks = Number.isFinite(+h.missingAnchorLinks) ? +h.missingAnchorLinks : 0;
+    const totalLinks = Number.isFinite(+h.linksTotal) ? +h.linksTotal : 0;
+  
+    const linkIssues = placeholderLinks + javascriptLinks + missingAnchorLinks;
+    const healthOk = brokenImages === 0 && linkIssues === 0;
+  
+    // Compact pill label
+    const healthText = healthOk
+      ? "Health ✓"
+      : `Health ⚠ ${brokenImages}img/${linkIssues}lnk`;
+  
+    const tipLines = [
+      `Images: ${brokenImages} broken of ${totalImages}`,
+      `Links: ${missingAnchorLinks} broken anchor(s), ${placeholderLinks} placeholder (#/empty), ${javascriptLinks} javascript: of ${totalLinks}`,
+    ];
+  
+    // Broken image details (so you can actually find the thing)
+    if (Array.isArray(h.brokenImageSamples) && h.brokenImageSamples.length) {
+      tipLines.push("Broken image samples (up to 5):");
+      for (const x of h.brokenImageSamples.slice(0, 5)) {
+        const src = x?.src || '(no src)';
+        const sel = x?.selector ? ` | ${x.selector}` : '';
+        const alt = x?.alt ? ` | alt="${x.alt}"` : '';
+        const why = x?.reason ? `[${x.reason}] ` : '';
+        tipLines.push(`- ${why}${src}${alt}${sel}`);
+      }
+    }
+  
+    // Broken in-page anchors
+    if (Array.isArray(h.missingAnchorSamples) && h.missingAnchorSamples.length) {
+      tipLines.push("Broken in-page anchor samples:");
+      for (const x of h.missingAnchorSamples.slice(0, 5)) {
+        const label = x?.text ? ` "${x.text}"` : '';
+        const sel = x?.selector ? ` | ${x.selector}` : '';
+        tipLines.push(`- ${x?.href || ''}${label}${sel}`);
+      }
+    }
+  
+    // Placeholder links (filtered to avoid common UI toggles)
+    if (Array.isArray(h.placeholderLinkSamples) && h.placeholderLinkSamples.length) {
+      tipLines.push("Placeholder link samples (#/empty):");
+      for (const x of h.placeholderLinkSamples.slice(0, 5)) {
+        const label = x?.text ? ` "${x.text}"` : '';
+        const sel = x?.selector ? ` | ${x.selector}` : '';
+        tipLines.push(`- ${x?.href || ''}${label}${sel}`);
+      }
+    }
+  
+    if (Array.isArray(h.javascriptLinkSamples) && h.javascriptLinkSamples.length) {
+      tipLines.push("javascript: link samples:");
+      for (const x of h.javascriptLinkSamples.slice(0, 5)) {
+        const label = x?.text ? ` "${x.text}"` : '';
+        const sel = x?.selector ? ` | ${x.selector}` : '';
+        tipLines.push(`- ${x?.href || ''}${label}${sel}`);
+      }
+    }
+  
+    setPill($health, healthOk ? "ok" : "warn", healthText, tipLines.join("\n"));
 }
 
 // Allow clicking a status pill to copy its details to clipboard.
@@ -272,6 +316,128 @@ function oneChangeText(raw) {
     if (first.length >= 24) t = first;
   }
   return t;
+}
+
+// Infer product line from URL/pageName/H1 so copy suggestions feel relevant.
+function inferLineOfBusiness(scan) {
+  const hay = `${scan?.url || ''} ${scan?.pageName || ''} ${scan?.h1 || ''} ${scan?.pathname || ''}`.toLowerCase();
+  if (/(auto|vehicle|car)/.test(hay)) return { key: 'auto', label: 'auto' };
+  if (/(homeowners|home\b|property)/.test(hay)) return { key: 'home', label: 'home' };
+  if (/(renters|renter)/.test(hay)) return { key: 'renters', label: 'renters' };
+  if (/(life\s*insurance|\blife\b)/.test(hay)) return { key: 'life', label: 'life' };
+  if (/(umbrella)/.test(hay)) return { key: 'umbrella', label: 'umbrella' };
+  if (/(motorcycle|bike)/.test(hay)) return { key: 'motorcycle', label: 'motorcycle' };
+  return { key: 'insurance', label: 'insurance' };
+}
+
+// Generate a short, paste-ready paragraph for a quote funnel.
+// No AI: just a small set of proven, plain-language options.
+function suggestShortParagraph(scan, lob) {
+  const label = (lob?.label || 'insurance');
+  const fast = (scan?.formCount >= 1) ? 'Answer a few quick questions' : 'Click the button to start';
+
+  // Primary: benefit + speed + low pressure.
+  const primary = label === 'insurance'
+    ? `Get a quote in minutes. ${fast} and see your price right away.`
+    : `Get your ${label} quote in minutes. ${fast} and see your price right away.`;
+
+  // Alt: reassurance about spam / obligation.
+  const alt1 = label === 'insurance'
+    ? `It’s quick and there’s no obligation. Start your quote now and you can review your price before you commit to anything.`
+    : `It’s quick and there’s no obligation. Start your ${label} quote now and review your price before you commit to anything.`;
+
+  // Alt: “no phone call” style (common friction reducer). Use only if we don't detect phone-required vibes.
+  const alt2 = `No spam. No pressure. Just a fast ${label === 'insurance' ? 'quote' : `${label} quote`} you can review in a few minutes.`;
+
+  return { primary, alt1, alt2 };
+}
+
+
+function noobVariantText(i) {
+  const scan = (typeof strategistLast === "object" && strategistLast) ? strategistLast : {};
+  const title = (i?.title || "").toLowerCase();
+  const rawB = i?.b || i?.variantB || i?.change || "";
+  const b = oneChangeText(rawB);
+
+  if (!b) return "";
+
+  // Make a couple of common tests extra concrete using what we detected on the page.
+  const ctaText = (scan.ctaText || "").trim();
+  const ctaBg = (scan.ctaStyle && scan.ctaStyle.background) ? String(scan.ctaStyle.background).trim() : "";
+  const ctaFg = (scan.ctaStyle && scan.ctaStyle.color) ? String(scan.ctaStyle.color).trim() : "";
+
+  if (title.includes("cta button color") || /button color|high contrast/.test(title + " " + b.toLowerCase())) {
+    const from = ctaBg ? `Current button background is ${ctaBg}. ` : "";
+    const to = "Set it to a noticeably different accent color (example: #FF7A00) and keep the text color white.";
+    return `Change the primary CTA button background color. ${from}${to} Nothing else changes.`;
+  }
+
+  if (title.includes("cta label") || /cta label|button text|label/.test(title + " " + b.toLowerCase())) {
+    const from = ctaText ? `Current button text is "${ctaText}". ` : "";
+    const to = 'Change it to ONE of these (pick one): "See my price" or "Start my quote".';
+    return `Update the primary CTA button text. ${from}${to} Leave the button style and page layout exactly the same.`;
+  }
+
+  if (/headline|h1/.test(title + " " + b.toLowerCase())) {
+    const cur = (scan.h1 || '').trim();
+    const curSnippet = cur ? cur.replace(/\s+/g, ' ').slice(0, 90) : '';
+    const lob = inferLineOfBusiness(scan);
+    const label = lob?.label || 'insurance';
+    const s1 = label === 'insurance' ? 'Get a quote in minutes.' : `Get your ${label} quote in minutes.`;
+    const s2 = label === 'insurance' ? 'See your price fast.' : `See your ${label} price fast.`;
+    const s3 = label === 'insurance' ? 'Start your quote now.' : `Start your ${label} quote now.`;
+
+    const parts = [];
+    if (curSnippet) parts.push(`Replace the H1 that says: "${curSnippet}${curSnippet.length >= 90 ? '…' : ''}"`);
+    parts.push(`Suggested headline: "${s1}"`);
+    parts.push(`Alt headline (optional): "${s2}"`);
+    parts.push(`Alt headline (optional): "${s3}"`);
+    parts.push("Do not change any other text, layout, or images.");
+    return parts.join(' ');
+  }
+
+  if (/paragraph|copy|text/.test(title + " " + b.toLowerCase())) {
+    // We want to hand the user an actual sentence/paragraph they can paste into Target.
+    // Pull a reference paragraph if we found one near the CTA/H1.
+    const ref = (scan.ctaParaText || scan.heroParaText || "").trim();
+    const refSnippet = ref ? ref.replace(/\s+/g, ' ').slice(0, 120) : "";
+
+    const lob = inferLineOfBusiness(scan);
+    const suggested = suggestShortParagraph(scan, lob);
+
+    const parts = [];
+    if (refSnippet) parts.push(`Replace the paragraph that starts with: "${refSnippet}${refSnippet.length >= 120 ? '…' : ''}"`);
+    parts.push(`Suggested replacement copy: "${suggested.primary}"`);
+    if (suggested.alt1) parts.push(`Alt copy (optional): "${suggested.alt1}"`);
+    if (suggested.alt2) parts.push(`Alt copy (optional): "${suggested.alt2}"`);
+    parts.push("Do not change any other paragraphs, layout, or images.");
+    return parts.join(" ");
+  }
+
+  // Default: keep it simple
+  return `${b} (Everything else stays the same.)`;
+}
+
+function targetHowTo(i) {
+  const placement = (i?.placement || "").trim();
+  const hint = placement ? ` (look for: ${placement})` : "";
+  const title = (i?.title || "").toLowerCase();
+  const rawB = (i?.b || i?.variantB || i?.change || "").toLowerCase();
+
+  // Basic guidance for a noob using Target VEC
+  if (/color|style|background|border|contrast/.test(title + " " + rawB)) {
+    return `In Adobe Target VEC: click the element${hint}, choose Edit > Style (or CSS), change ONLY the background/text color, then save.`;
+  }
+  if (/text|copy|headline|label|cta/.test(title + " " + rawB)) {
+    return `In Adobe Target VEC: click the text${hint}, choose Edit > Text, replace it, then save. (Only change that one thing.)`;
+  }
+  if (/image|hero|photo/.test(title + " " + rawB)) {
+    return `In Adobe Target VEC: click the image${hint}, choose Replace Image, paste the new URL, then save.`;
+  }
+  if (/form|field|zip|email|phone/.test(title + " " + rawB)) {
+    return `In Adobe Target VEC: click the form element${hint} and change ONE label/placeholder. If it’s a JS-rendered form (SPA), use custom code or Form-Based Composer.`;
+  }
+  return `In Adobe Target VEC: find the element${hint} and make the single change described in Variant (B).`;
 }
 
 function renderStrategistIdeas(ideas) {
@@ -355,8 +521,10 @@ function renderStrategistIdeas(ideas) {
     addKV("Placement", i.placement);
     addKV("Test", test);
     if (why && String(why).length <= 140) addKV("Why", why);
-    addKV("Control (A)", a);
-    addKV("Variant (B)", oneChangeText(b));
+    addKV("Control (A)", "No change. This is the current page (Control).");
+    addKV("What exists today", a);
+    addKV("Variant (B)", noobVariantText(i));
+    addKV("How to do it (Target)", targetHowTo(i));
     addKV("Measure", measure);
     if (guard) addKV("Guardrail", guard);
 
@@ -386,8 +554,10 @@ function formatIdeaForClipboard(i, idx) {
     placement ? `Placement: ${placement}` : "",
     test ? `Test: ${test}` : "",
     (why && String(why).length <= 200) ? `Why: ${why}` : "",
-    a ? `Control (A): ${a}` : "",
-    b ? `Variant (B): ${oneChangeText(b)}` : "",
+    `Control (A): No change (current page).`,
+    a ? `Current (reference): ${a}` : "",
+    b ? `Variant (B): ${noobVariantText(i)}` : "",
+    `How in Target: ${targetHowTo(i)}`,
     measure ? `Measure: ${measure}` : "",
     guard ? `Guardrail: ${guard}` : ""
   ].filter(Boolean).join("\n");
@@ -580,41 +750,229 @@ async function scanStrategist() {
               if (href) score += 1;
             }
 
-            out.push({ score, text, href, tag: el.tagName, selector: uniqueSelector(el) });
+            const cs = window.getComputedStyle(el);
+            out.push({
+              score,
+              text,
+              href,
+              tag: el.tagName,
+              selector: uniqueSelector(el),
+              style: {
+                background: cs.backgroundColor || '',
+                color: cs.color || '',
+                border: cs.borderTopWidth ? `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}` : (cs.border || ''),
+                fontSize: cs.fontSize || '',
+                fontWeight: cs.fontWeight || '',
+                padding: `${cs.paddingTop} ${cs.paddingRight} ${cs.paddingBottom} ${cs.paddingLeft}`,
+                borderRadius: cs.borderRadius || ''
+              }
+            });
           }
 
           out.sort((a, b) => b.score - a.score);
-          return out[0] || { score: 0, text: '', href: '', tag: '', selector: '' };
+          return out[0] || { score: 0, text: '', href: '', tag: '', selector: '', style: { background:'', color:'', border:'', fontSize:'', fontWeight:'', padding:'', borderRadius:'' } };
         }
 
         const cta = bestCta();
+
+        // Try to find a paragraph near the CTA (helpful for copy-replacement tests).
+        function isVisible(el) {
+          if (!el) return false;
+          // offsetParent is null for display:none, but can be null for fixed positioned elements; also check rect.
+          const r = el.getBoundingClientRect?.();
+          return (el.offsetParent !== null) || (r && (r.width > 0 || r.height > 0));
+        }
+
+        function normText(t) {
+          return String(t || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function findParagraphNearSelector(sel) {
+          try {
+            if (!sel) return null;
+            const el = document.querySelector(sel);
+            if (!el) return null;
+
+            // Walk up a few levels and look for a reasonably long <p>
+            let cur = el;
+            for (let d = 0; d < 5 && cur; d++) {
+              const container = cur.closest('section,article,main,div,form') || cur.parentElement;
+              if (container) {
+                const ps = Array.from(container.querySelectorAll('p'))
+                  .map(p => ({ p, text: normText(p.innerText || p.textContent || '') }))
+                  .filter(x => x.text.length >= 40 && x.text.length <= 280 && isVisible(x.p));
+                if (ps.length) {
+                  const hit = ps[0].p;
+                  return { text: normText(hit.innerText || hit.textContent || ''), selector: uniqueSelector(hit) };
+                }
+              }
+              cur = cur.parentElement;
+            }
+
+            // Last resort: any paragraph on page (first non-empty)
+            const any = Array.from(document.querySelectorAll('p'))
+              .map(p => ({ p, text: normText(p.innerText || p.textContent || '') }))
+              .find(x => x.text.length >= 40 && x.text.length <= 280 && isVisible(x.p));
+            if (any) return { text: any.text, selector: uniqueSelector(any.p) };
+          } catch (_) {}
+          return null;
+        }
+
+        const ctaPara = findParagraphNearSelector(cta.selector);
+
+        // Hero paragraph: a paragraph near the first H1 (common for quote landing pages)
+        let heroPara = null;
+        if (h1El) {
+          const heroContainer = h1El.closest('section,article,main,div') || h1El.parentElement;
+          if (heroContainer) {
+            const ps = Array.from(heroContainer.querySelectorAll('p'))
+              .map(p => ({ p, text: normText(p.innerText || p.textContent || '') }))
+              .filter(x => x.text.length >= 40 && x.text.length <= 280 && isVisible(x.p));
+            if (ps.length) {
+              heroPara = { text: ps[0].text, selector: uniqueSelector(ps[0].p) };
+            }
+          }
+        }
         const formCount = document.querySelectorAll('form').length;
         const firstForm = document.querySelector('form');
         const formSelector = firstForm ? uniqueSelector(firstForm) : '';
 
-        // Lightweight page health: broken images + suspicious links
+        // Page health: broken images + link quality (lightweight; no network crawling)
+        function labelFor(el) {
+          if (!el) return '';
+          const t = ((el.innerText || el.textContent || '') + '').trim();
+          if (t) return t.replace(/\s+/g, ' ').slice(0, 80);
+          const aria = (el.getAttribute('aria-label') || '').trim();
+          if (aria) return aria.replace(/\s+/g, ' ').slice(0, 80);
+          const title = (el.getAttribute('title') || '').trim();
+          if (title) return title.replace(/\s+/g, ' ').slice(0, 80);
+          return '';
+        }
+
+        function safeUrl(u) {
+          try {
+            if (!u) return '';
+            // URL constructor will resolve relative URLs against the document URL
+            return new URL(u, document.baseURI).href;
+          } catch (_) { return (u || '').trim(); }
+        }
+
         const imgs = Array.from(document.images || []);
         let brokenImages = 0;
         const brokenImageSamples = [];
         for (const img of imgs) {
-          const src = (img.currentSrc || img.src || img.getAttribute('src') || '').trim();
-          const ok = !!src && img.complete && (img.naturalWidth || 0) > 0;
-          if (!ok) {
+          const raw = (img.getAttribute('src') || '').trim();
+          const src = (img.currentSrc || img.src || raw || '').trim();
+          const resolved = safeUrl(src);
+          const complete = !!img.complete;
+          const nw = (img.naturalWidth || 0);
+
+          // Common lazy-load attributes that can help identify the real intended src.
+          const dataSrc = (img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || img.getAttribute('data-original') || '').trim();
+          const dataSrcset = (img.getAttribute('data-srcset') || '').trim();
+
+          let reason = '';
+          if (!src && !raw) {
+            reason = dataSrc ? 'missing src (has data-src)' : 'missing src attribute';
+          }
+          else if (!complete) reason = 'still loading (or blocked)';
+          else if (nw === 0) reason = 'failed to load (naturalWidth=0)';
+
+          if (reason) {
             brokenImages++;
-            if (brokenImageSamples.length < 5) brokenImageSamples.push(src || '(no src)');
+            if (brokenImageSamples.length < 5) {
+              brokenImageSamples.push({
+                reason,
+                src: resolved || (dataSrc ? safeUrl(dataSrc) : '(no src)'),
+                dataSrc: dataSrc ? safeUrl(dataSrc) : '',
+                dataSrcset: dataSrcset ? dataSrcset.slice(0, 120) : '',
+                alt: (img.getAttribute('alt') || '').trim().slice(0, 80),
+                selector: uniqueSelector(img)
+              });
+            }
           }
         }
 
         const links = Array.from(document.querySelectorAll('a'));
-        let brokenLinks = 0;
-        const brokenLinkSamples = [];
+        let placeholderLinks = 0;     // href="" or href="#"
+        let javascriptLinks = 0;      // javascript:
+        let missingAnchorLinks = 0;   // href="#something" but target doesn't exist
+        const placeholderLinkSamples = [];
+        const javascriptLinkSamples = [];
+        const missingAnchorSamples = [];
+
+        function isUiToggle(a) {
+          if (!a) return false;
+          // If it's in nav/header and is a placeholder, it's almost always a UI toggle.
+          if (a.closest('nav,header') && ((a.getAttribute('href') || '').trim() === '#')) return true;
+          const role = (a.getAttribute('role') || '').toLowerCase();
+          if (role === 'button') return true;
+          if (a.hasAttribute('onclick')) return true;
+          if (a.hasAttribute('data-bs-toggle') || a.hasAttribute('data-toggle')) return true;
+          if (a.hasAttribute('aria-controls') || a.hasAttribute('aria-expanded')) return true;
+
+          // Any data-* attribute is a strong UI-toggle signal.
+          try {
+            const names = a.getAttributeNames ? a.getAttributeNames() : [];
+            if (names.some(n => n.toLowerCase().startsWith('data-'))) return true;
+          } catch (_) {}
+
+          const cls = ((a.className || '') + '').toLowerCase();
+          if (/(dropdown-toggle|accordion|collapse|tab|tabs|modal|offcanvas|menu|nav|hamburger|toggle|drawer|expand|chevron)/.test(cls)) return true;
+
+          // Icon-only placeholders are usually toggles.
+          const label = labelFor(a);
+          if (!label && (a.querySelector('svg, img, i'))) return true;
+
+          return false;
+        }
+
         for (const a of links) {
-          const href = (a.getAttribute('href') || '').trim();
-          const low = href.toLowerCase();
-          const suspicious = (!href || href === '#' || low.startsWith('javascript:'));
-          if (suspicious) {
-            brokenLinks++;
-            if (brokenLinkSamples.length < 5) brokenLinkSamples.push(href || '(empty)');
+          const hrefAttr = (a.getAttribute('href') || '').trim();
+          const low = hrefAttr.toLowerCase();
+
+          // javascript: links (generally not desirable for SEO/accessibility)
+          if (low.startsWith('javascript:')) {
+            javascriptLinks++;
+            if (javascriptLinkSamples.length < 5) {
+              javascriptLinkSamples.push({
+                href: hrefAttr,
+                text: labelFor(a),
+                selector: uniqueSelector(a)
+              });
+            }
+            continue;
+          }
+
+          // Empty or # placeholder links: ignore "UI toggles" so nav menus don't scream every page
+          if (!hrefAttr || hrefAttr === '#') {
+            if (!isUiToggle(a)) {
+              placeholderLinks++;
+              if (placeholderLinkSamples.length < 5) {
+                placeholderLinkSamples.push({
+                  href: hrefAttr || '(empty)',
+                  text: labelFor(a),
+                  selector: uniqueSelector(a)
+                });
+              }
+            }
+            continue;
+          }
+
+          // In-page anchors: check whether target exists
+          if (hrefAttr.startsWith('#') && hrefAttr.length > 1) {
+            const id = hrefAttr.slice(1);
+            const hit = document.getElementById(id) || document.querySelector(`[name="${CSS.escape(id)}"]`);
+            if (!hit) {
+              missingAnchorLinks++;
+              if (missingAnchorSamples.length < 5) {
+                missingAnchorSamples.push({
+                  href: hrefAttr,
+                  text: labelFor(a),
+                  selector: uniqueSelector(a)
+                });
+              }
+            }
           }
         }
 
@@ -623,8 +981,12 @@ async function scanStrategist() {
           brokenImages,
           brokenImageSamples,
           linksTotal: links.length,
-          brokenLinks,
-          brokenLinkSamples
+          placeholderLinks,
+          javascriptLinks,
+          missingAnchorLinks,
+          placeholderLinkSamples,
+          javascriptLinkSamples,
+          missingAnchorSamples
         };
 
         return {
@@ -632,9 +994,14 @@ async function scanStrategist() {
           pathname,
           h1,
           h1Selector,
+          heroParaText: heroPara ? heroPara.text : '',
+          heroParaSelector: heroPara ? heroPara.selector : '',
+          ctaParaText: ctaPara ? ctaPara.text : '',
+          ctaParaSelector: ctaPara ? ctaPara.selector : '',
           ctaText: cta.text,
           ctaHref: cta.href,
           ctaSelector: cta.selector,
+          ctaStyle: cta.style || {},
           formCount,
           formSelector,
           health,
@@ -659,6 +1026,10 @@ async function scanStrategist() {
       pathname: (data.pathname || ""),
       h1: (data.h1 || ""),
       h1Selector: (data.h1Selector || ""),
+      heroParaText: (data.heroParaText || ""),
+      heroParaSelector: (data.heroParaSelector || ""),
+      ctaParaText: (data.ctaParaText || ""),
+      ctaParaSelector: (data.ctaParaSelector || ""),
       ctaText: (data.ctaText || ""),
       ctaHref: (data.ctaHref || ""),
       ctaSelector: (data.ctaSelector || ""),
@@ -778,6 +1149,10 @@ function buildSuggestionsFromScan(s, opts = {}) {
   const ctaText = (s.ctaText || "").trim();
   const ctaHref = (s.ctaHref || "").trim();
   const ctaSelector = (s.ctaSelector || "").trim();
+  const ctaStyle = (s.ctaStyle || {});
+  const ctaBg = (ctaStyle.background || "").trim();
+  const ctaFg = (ctaStyle.color || "").trim();
+
   const formCount = Number.isFinite(+s.formCount) ? +s.formCount : null;
   const formSelector = (s.formSelector || "").trim();
 
@@ -790,10 +1165,15 @@ function buildSuggestionsFromScan(s, opts = {}) {
 
   const h = s.health || {};
   const brokenImages = Number.isFinite(+h.brokenImages) ? +h.brokenImages : 0;
-  const brokenLinks = Number.isFinite(+h.brokenLinks) ? +h.brokenLinks : 0;
-  const healthLine = (brokenImages === 0 && brokenLinks === 0)
-    ? 'Health: OK (no broken images or suspicious links detected)'
-    : `Health: ⚠ ${brokenImages} broken image(s), ${brokenLinks} suspicious link(s)`;
+
+  const placeholderLinks = Number.isFinite(+h.placeholderLinks) ? +h.placeholderLinks : 0;
+  const javascriptLinks = Number.isFinite(+h.javascriptLinks) ? +h.javascriptLinks : 0;
+  const missingAnchorLinks = Number.isFinite(+h.missingAnchorLinks) ? +h.missingAnchorLinks : 0;
+  const linkIssues = placeholderLinks + javascriptLinks + missingAnchorLinks;
+
+  const healthLine = (brokenImages === 0 && linkIssues === 0)
+    ? 'Health: OK (no broken images or link issues detected)'
+    : `Health: ⚠ ${brokenImages} broken image(s), ${missingAnchorLinks} broken anchor(s), ${placeholderLinks} placeholder link(s), ${javascriptLinks} javascript: link(s)`;
 
   const hay = `${page} ${pathname} ${h1} ${ctaText}`.toLowerCase();
   const inferredQuote = /quote|get\s*a\s*quote|start\s*quote|auto\s*quote|home\s*quote|bundle|insurance/.test(hay);
@@ -842,8 +1222,10 @@ function buildSuggestionsFromScan(s, opts = {}) {
       placement ? `  Placement: ${placement}` : '',
       `  Test: ${test}`,
       (why && String(why).length <= 140) ? `  Why: ${why}` : '',
-      `  Control (A): ${a}`,
-      `  Variant (B): ${oneChangeText(b)}`,
+      `  Control (A): No change (current page).`,
+      a ? `  Current (reference): ${a}` : '' ,
+      `  Variant (B): ${noobVariantText(i)}`,
+      `  How (Target): ${targetHowTo(i)}`,
       `  Measure: ${measure}`,
       guard ? `  Guardrail: ${guard}` : ''
     ].filter(Boolean).join("\n");
@@ -957,7 +1339,7 @@ function buildSuggestionsFromScan(s, opts = {}) {
       placement: ctaSelector ? `Primary CTA button (${ctaSelector})` : (ctaText ? `Primary CTA (${ctaText})` : "Primary CTA button"),
       change: "Change primary CTA button color",
       variantA: "Current button color/style.",
-      variantB: "Use a high-contrast accent color (keep text white).",
+      variantB: ctaBg ? `Change the CTA button background from ${ctaBg} to a noticeably different accent color (example: #FF7A00). Keep the text color white.` : "Change the CTA button background to a noticeably different accent color (example: #FF7A00). Keep the text color white.",
       kpi: "CTA clicks → quote starts",
       guardrails: "Bounce, misclicks",
       tags: ["quote","cta","color"]
@@ -1187,7 +1569,7 @@ function buildSuggestionsFromScan(s, opts = {}) {
       placement: ctaText ? `Primary CTA (currently: "${ctaText}")` : "Primary CTA",
       hypothesis: "More specific action language increases clicks.",
       variantA: ctaText ? `CTA label: "${ctaText}"` : "Current CTA label",
-      variantB: "Try: 'See my price' / 'Start my quote' / 'Get my estimate'",
+      variantB: ctaText ? `Change the CTA button text from "${ctaText}" to ONE of these (pick one): "See my price" or "Start my quote".` : "Change the CTA button text to ONE of these (pick one): \"See my price\" or \"Start my quote\".",
       kpi: "CTA click-through",
       guardrails: "Bounce, misclicks",
       tags: ["quote"]
