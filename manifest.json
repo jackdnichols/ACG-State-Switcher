@@ -1,29 +1,33 @@
 {
   "manifest_version": 3,
-  "name": "State Switcher for acg.aaa.com",
-  "version": "1.78",
-  "description": "ACG Utilities: env links, author badge, state cookie switcher + indicator, and Target Strategist (variant copy + page health).",
-  "permissions": ["storage", "scripting", "activeTab", "cookies"],
+  "name": "ACG Utilities State Switcher",
+  "version": "1.86",
+  "description": "Developer utility for ACG pages: switch ACG state using the current zip-only flow, open environment links, generate local A/B test ideas, and show an author badge.",
+  "permissions": [
+    "storage",
+    "scripting",
+    "activeTab",
+    "cookies"
+  ],
   "host_permissions": [
-    "https://acg.aaa.com/*",
-    "https://*.acg.aaa.com/*",
-    "https://meemic.com/*",
-    "https://*.meemic.com/*",
-    "https://meemicfoundation.org/*",
-    "https://*.meemicfoundation.org/*",
+    "https://aaa.com/*",
+    "https://*.aaa.com/*",
     "https://author-p149839-e1583596.adobeaemcloud.com/*",
     "https://author-p149839-e1583546.adobeaemcloud.com/*",
     "https://author-p149839-e1583595.adobeaemcloud.com/*",
     "https://author-p149839-e1544194.adobeaemcloud.com/*"
   ],
-  "background": { "service_worker": "background.js" },
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icons/aaa.png",
-      "48": "icons/aaa.png",
-      "128": "icons/aaa.png"
-    }
+      "16": "icons/icon_16.png",
+      "48": "icons/icon_48.png",
+      "128": "icons/icon_128.png"
+    },
+    "default_title": "ACG Utilities"
   },
   "content_scripts": [
     {
@@ -33,8 +37,36 @@
         "https://author-p149839-e1583595.adobeaemcloud.com/*",
         "https://author-p149839-e1544194.adobeaemcloud.com/*"
       ],
-      "js": ["content-script.js"],
+      "js": [
+        "content-script.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://acg.aaa.com/*",
+        "https://*.acg.aaa.com/*"
+      ],
+      "js": [
+        "state-cookie-guard.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://acg.aaa.com/*",
+        "https://*.acg.aaa.com/*"
+      ],
+      "js": [
+        "state-keeper.js"
+      ],
       "run_at": "document_start"
     }
-  ]
+  ],
+  "icons": {
+    "16": "icons/icon_16.png",
+    "48": "icons/icon_48.png",
+    "128": "icons/icon_128.png"
+  }
 }

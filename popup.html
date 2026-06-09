@@ -33,13 +33,13 @@
         <div class="row-between">
           <div class="row" style="gap:10px;align-items:center">
             <h3 style="margin:0">ACG State</h3>
-            <span id="currentStatePill" class="pill pill-neutral" title="Reads the current state from the AEM.state cookie on the active ACG tab.">Current: —</span>
+            <span id="currentStatePill" class="pill pill-neutral" title="Reads AEM.state and falls back to the zipcode cookie on the active ACG tab.">Current: —</span>
           </div>
-          <span class="help" tabindex="0" role="img" aria-label="Help" title="Go to an ACG/AAA page, select a State and click Apply State Cookies. This sets the cookie values used by ACG for geo/state behavior on the active tab and refreshes the page.">?</span>
+          <span class="help" tabindex="0" role="img" aria-label="Help" title="Go to an ACG/AAA page, select a state, and click Switch State. This starts ACG's current zip-only lookup flow and keeps AEM.state/zipcode aligned.">?</span>
         </div>
 
-        <label class="label" for="stateSelect" title="Chooses which state cookie bundle to apply on the active ACG tab.">State cookie bundle</label>
-        <select id="stateSelect" title="Pick the state you want the site to behave as.">
+        <label class="label" for="stateSelect" title="Chooses which ACG state/ZIP profile to use on the active ACG tab.">State</label>
+        <select id="stateSelect" title="Pick the state you want ACG to behave as.">
           <option>Colorado</option><option>Florida</option><option>Georgia</option><option>Illinois</option>
           <option>Indiana</option><option>Iowa</option><option>Michigan</option><option>Minnesota</option>
           <option>Nebraska</option><option>North Carolina</option><option>North Dakota</option>
@@ -47,7 +47,7 @@
         </select>
 
         <div class="spacer"></div>
-        <button id="applyBtn" type="button" title="Apply the selected state cookie bundle to the active tab.">Apply State Cookies</button>
+        <button id="applyBtn" type="button" title="Switch the active ACG tab using the selected state's ZIP profile.">Switch State</button>
         <div id="stateLockNote" class="hint" style="display:none">
           State cookies can only be applied when the active tab is on <strong>acg.aaa.com</strong> (or its subdomains).
         </div>

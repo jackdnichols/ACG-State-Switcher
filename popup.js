@@ -1,10 +1,11 @@
 // ===============================
-// ACG State Switcher — popup.js
+// ACG Utilities State Switcher — popup.js
 // ===============================
 
 // Popup UI storage keys
 const POPUP_TAB_KEY = "popupActiveTab";
 const STRATEGIST_CUSTOM_KEY = "strategistCustomIdeas";
+const ACG_STATE_KEEPER_KEY = "acgStateKeeper";
 
 function isAcgAaaHost(urlString) {
 	try {
@@ -49,6 +50,46 @@ const STATE_CODE_TO_NAME = {
   WI: "Wisconsin"
 };
 
+// ACG no longer exposes the old state dropdown. The current OneACG page source
+// reads state behavior from AEM.state and the pipe-delimited zipcode cookie:
+//   zipcode = clubZip|association|clubCode|device
+// Keep this small and intentional instead of replaying large captured cookie jars.
+const STATE_PROFILES = {
+  "Colorado":       { code: "CO", zip: "80012", clubCode: "6" },
+  "Florida":        { code: "FL", zip: "33601", clubCode: "14" },
+  "Georgia":        { code: "GA", zip: "33592", clubCode: "14" },
+  "Illinois":       { code: "IL", zip: "61525", clubCode: "20" },
+  "Indiana":        { code: "IN", zip: "61525", clubCode: "20" },
+  "Iowa":           { code: "IA", zip: "50102", clubCode: "49" },
+  "Michigan":       { code: "MI", zip: "48237", clubCode: "47" },
+  "Minnesota":      { code: "MN", zip: "55101", clubCode: "49" },
+  "Nebraska":       { code: "NE", zip: "68336", clubCode: "69" },
+  "North Carolina": { code: "NC", zip: "28105", clubCode: "111" },
+  "North Dakota":   { code: "ND", zip: "58102", clubCode: "113" },
+  "Puerto Rico":    { code: "PR", zip: "00901", clubCode: "714" },
+  "South Carolina": { code: "SC", zip: "29401", clubCode: "111" },
+  "Tennessee":      { code: "TN", zip: "37617", clubCode: "14" },
+  "Wisconsin":      { code: "WI", zip: "53558", clubCode: "270" }
+};
+
+const STATE_CODE_TO_PROFILE = Object.fromEntries(
+  Object.entries(STATE_PROFILES).map(([name, profile]) => [profile.code, { ...profile, name }])
+);
+const STATE_ZIP_TO_CODE = Object.fromEntries(
+  Object.values(STATE_PROFILES).map(profile => [profile.zip, profile.code])
+);
+const UNIQUE_CLUB_CODE_TO_STATE = {
+  "6": "CO",
+  "47": "MI",
+  "69": "NE",
+  "113": "ND",
+  "270": "WI",
+  "714": "PR"
+};
+const CORE_STATE_COOKIE_NAMES = ["AEM.state", "zipcode", "_lr_geo_location_state", "_lr_geo_location", "zipgate-deeplink-data", "currenturl", "tempProxyUI"];
+const PAGE_STATE_OVERRIDE_KEY = "__acgStateSwitcherOverride";
+const ACG_COOKIE_URL = "https://www.acg.aaa.com/";
+
 function setCurrentStatePill(code) {
   const el = document.getElementById('currentStatePill');
   if (!el) return;
@@ -74,17 +115,16 @@ function setCurrentStatePill(code) {
   }
 }
 
-async function readCurrentStateFromCookies(tabUrl) {
-  // Most reliable: ask for the cookie using the active tab URL (domain matching is handled by Chrome).
-  // Fallback to a stable ACG URL if tabUrl is missing.
+async function readCookieValueFromAnyAllowedUrl(tabUrl, name) {
+  // Most reliable: ask for the cookie using the active tab URL. Domain matching is handled by Chrome.
+  // Fallback to a stable ACG URL because the state cookies are written for .aaa.com.
   const urlsToTry = [];
   if (tabUrl) urlsToTry.push(tabUrl);
-  urlsToTry.push('https://www.acg.aaa.com/');
-  urlsToTry.push('https://aaa.com/');
+  urlsToTry.push(ACG_COOKIE_URL);
 
   for (const u of urlsToTry) {
     try {
-      const c = await chrome.cookies.get({ url: u, name: 'AEM.state' });
+      const c = await chrome.cookies.get({ url: u, name });
       const val = (c && c.value) ? String(c.value).trim() : '';
       if (val) return val;
     } catch { /* ignore */ }
@@ -92,17 +132,299 @@ async function readCurrentStateFromCookies(tabUrl) {
   return '';
 }
 
-/* ---------- Apply Cookies ---------- */
-const DOMAIN_ALLOWLIST = ["aaa.com", "acg.aaa.com", "meemic.com", "meemicfoundation.org"];
-function targetUrlForCookie(c){const p=(c.path&&String(c.path))||"/";if(c.hostOnly&&c.domain){const h=String(c.domain).replace(/^\./,"");return `https://${h}${p.startsWith("/")?p:`/${p}`}`;}return `https://www.acg.aaa.com${p.startsWith("/")?p:`/${p}`}`;}
-function normalizeSameSite(v){if(v==null)return;const s=String(v).toLowerCase();if(s==="none"||s==="no_restriction")return"no_restriction";if(s==="lax")return"lax";if(s==="strict")return"strict";}
-function isAllowedHost(url){try{const u=new URL(url);const h=u.hostname.toLowerCase();return DOMAIN_ALLOWLIST.some(d=>{d=d.toLowerCase().replace(/^\./,"");return h===d||h.endsWith("."+d);});}catch{return false;}}
-function buildCompatDetails(c){const d={url:targetUrlForCookie(c),name:c.name,value:String(c.value??""),path:(c.path&&String(c.path))||"/",secure:!!c.secure,httpOnly:!!c.httpOnly};if(!c.hostOnly&&c.domain)d.domain=c.domain;const ss=normalizeSameSite(c.sameSite);if(ss)d.sameSite=ss;if(d.sameSite==="no_restriction"){d.secure=true;try{const u=new URL(d.url);u.protocol="https:";d.url=u.toString();}catch{}}if(Number.isFinite(+c.expirationDate))d.expirationDate=Math.floor(+c.expirationDate);return d;}
-function candidateCookiePaths(n){const raw=(n||"").trim();const ns=raw.replace(/\s+/g,"");const low=raw.toLowerCase();const lns=low.replace(/\s+/g,"");return[`cookies/${raw}.json`,`cookies/${ns}.json`,`cookies/${low}.json`,`cookies/${lns}.json`];}
-async function fetchFirstCookieFile(n){const tried=[];for(const p of candidateCookiePaths(n)){const url=chrome.runtime.getURL(p);tried.push(url);try{const r=await fetch(url);if(r.ok)return{json:await r.json(),path:p};}catch{}}const e=new Error(`No cookie file found for "${n}".`);e.tried=tried;throw e;}
-async function applyCookies(cookies){let ok=0,fail=0;const errors=[];for(const c of cookies){const name=c?.name||"(unnamed)";try{if(!c?.name)throw new Error("Missing name");const val=String(c.value??"");if(val.length>4096)throw new Error("Value exceeds 4096 bytes");let det=buildCompatDetails(c);if(!isAllowedHost(det.url)){const exact=(c.hostOnly&&c.domain)?String(c.domain).replace(/^\./,""):(c.domain?String(c.domain).replace(/^\./,""):"www.acg.aaa.com");det={url:`https://${exact}/`,name:c.name,value:String(c.value??""),path:"/",secure:true,httpOnly:!!c.httpOnly};if(!isAllowedHost(det.url))throw new Error(`not in allowlist (${det.url})`);}await chrome.cookies.set(det);ok++;}catch(e){fail++;errors.push(`${name}: ${e?.message||e}`);}}return{ok,fail,errors};}
-function toast(el,msg,ok=true){if(!el)return;el.className=`msg ${ok?"ok":"err"}`;el.textContent=msg;}
+function normalizeStateCode(code) {
+  const c = (code || '').toString().trim().toUpperCase();
+  return STATE_CODE_TO_NAME[c] ? c : '';
+}
 
+function deriveStateCodeFromZipcodeCookie(zipCookieValue) {
+  const parts = (zipCookieValue || '').toString().split('|');
+  const zip = (parts[0] || '').trim();
+  const clubCode = (parts[2] || '').replace(/^0+/, '') || (parts[2] || '').trim();
+
+  // Prefer exact test ZIPs because some ACG club codes serve multiple states.
+  if (STATE_ZIP_TO_CODE[zip]) return STATE_ZIP_TO_CODE[zip];
+
+  // Only derive from club code when the mapping is unique.
+  if (UNIQUE_CLUB_CODE_TO_STATE[clubCode]) return UNIQUE_CLUB_CODE_TO_STATE[clubCode];
+  return '';
+}
+
+async function readCurrentStateFromCookies(tabUrl) {
+  const aemState = normalizeStateCode(await readCookieValueFromAnyAllowedUrl(tabUrl, 'AEM.state'));
+  if (aemState) return aemState;
+
+  const zipCookie = await readCookieValueFromAnyAllowedUrl(tabUrl, 'zipcode');
+  const zipState = deriveStateCodeFromZipcodeCookie(zipCookie);
+  if (zipState) return zipState;
+
+  return normalizeStateCode(await readCookieValueFromAnyAllowedUrl(tabUrl, '_lr_geo_location_state'));
+}
+
+function profileForStateName(name) {
+  const raw = (name || '').toString().trim();
+  if (STATE_PROFILES[raw]) return { ...STATE_PROFILES[raw], name: raw };
+
+  const code = normalizeStateCode(raw);
+  if (code && STATE_CODE_TO_PROFILE[code]) return STATE_CODE_TO_PROFILE[code];
+
+  const lower = raw.toLowerCase();
+  const match = Object.keys(STATE_PROFILES).find(n => n.toLowerCase() === lower);
+  return match ? { ...STATE_PROFILES[match], name: match } : null;
+}
+
+function normalizeAemStateCookieValue(value) {
+  const raw = (value || '').toString().trim();
+  const profile = profileForStateName(raw);
+  if (profile?.code) return profile.code.toString().trim().toUpperCase();
+  return raw.toUpperCase();
+}
+
+function profileStateCode(profile) {
+  const code = normalizeAemStateCookieValue(profile?.code || profile?.name);
+  if (!/^[A-Z]{2}$/.test(code)) {
+    throw new Error(`Invalid AEM.state value: ${code || '(blank)'}`);
+  }
+  return code;
+}
+
+function normalizeDeviceCode(device) {
+  const d = (device || '').toString().trim().toUpperCase();
+  return ["PC", "SP", "TB"].includes(d) ? d : "PC";
+}
+
+async function readCurrentDeviceCode(tabUrl) {
+  const zipCookie = await readCookieValueFromAnyAllowedUrl(tabUrl, 'zipcode');
+  const device = (zipCookie || '').split('|')[3];
+  return normalizeDeviceCode(device);
+}
+
+function expirationDaysFromNow(days) {
+  return Math.floor(Date.now() / 1000) + Math.floor(days * 24 * 60 * 60);
+}
+
+function plainAcgDomainCookieDetails(name, value, expirationDate) {
+  // Match the way ACG writes its own .aaa.com cookies. DevTools showed ACG
+  // repainting AEM.state as a plain cookie, so avoid Secure/SameSite differences
+  // that can make our write lose the final cookie tug-of-war.
+  const cookieValue = name === "AEM.state"
+    ? normalizeAemStateCookieValue(value)
+    : String(value ?? "");
+
+  return {
+    url: ACG_COOKIE_URL,
+    domain: ".aaa.com",
+    name,
+    value: cookieValue,
+    path: "/",
+    secure: false,
+    expirationDate
+  };
+}
+
+function secureAcgHostCookieDetails(url, name, value, expirationDate) {
+  return {
+    url,
+    name,
+    value: String(value ?? ""),
+    path: "/",
+    secure: true,
+    sameSite: "no_restriction",
+    expirationDate
+  };
+}
+
+function secureAcgDomainCookieDetails(name, value, expirationDate) {
+  return {
+    url: ACG_COOKIE_URL,
+    domain: ".aaa.com",
+    name,
+    value: String(value ?? ""),
+    path: "/",
+    secure: true,
+    sameSite: "no_restriction",
+    expirationDate
+  };
+}
+
+async function saveStateKeeperOverride(stateCode, zipcodeValue, zip, stateName) {
+  const now = Date.now();
+  const payload = {
+    mode: "zipgate",
+    stateCode,
+    stateName: String(stateName || ""),
+    zipcodeValue,
+    zip: String(zip || (zipcodeValue || "").split("|")[0] || ""),
+    countryValue: "US",
+    nonce: `${stateCode}-${Date.now()}`,
+    updatedAt: now,
+    // Let the ACG zip lookup run first. The background/content fallback starts after this.
+    deferUntil: now + 20000,
+    expiresAt: now + (60 * 60 * 1000)
+  };
+  try {
+    await chrome.storage.local.set({ [ACG_STATE_KEEPER_KEY]: payload });
+  } catch { /* storage is best-effort only */ }
+  return payload;
+}
+
+async function installPageStateOverride(tabId, payload) {
+  if (!tabId || !payload) return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      args: [PAGE_STATE_OVERRIDE_KEY, payload],
+      func: (key, value) => {
+        try { window.localStorage.setItem(key, JSON.stringify(value)); } catch {}
+        try { window.sessionStorage.removeItem(`__acgStateSwitcherZipSubmitted:${value.nonce}`); } catch {}
+      }
+    });
+  } catch {
+    // Page localStorage is an optimization. Static content scripts will still read chrome.storage.
+  }
+}
+
+function urlWithZipGateParams(urlString, zip, stateCode) {
+  try {
+    const u = new URL(urlString || ACG_COOKIE_URL);
+    u.searchParams.set("zip", String(zip || ""));
+    u.searchParams.set("stateprov", String(stateCode || "").toUpperCase());
+    u.searchParams.set("acgStateSwitcher", "1");
+    return u.toString();
+  } catch {
+    const u = new URL(ACG_COOKIE_URL);
+    u.searchParams.set("zip", String(zip || ""));
+    u.searchParams.set("stateprov", String(stateCode || "").toUpperCase());
+    u.searchParams.set("acgStateSwitcher", "1");
+    return u.toString();
+  }
+}
+
+function cookieRemovalUrl(cookie) {
+  const cookieDomain = String(cookie?.domain || "www.acg.aaa.com").replace(/^\./, "").toLowerCase();
+  const path = (cookie?.path && String(cookie.path)) || "/";
+
+  // For .aaa.com cookies, use an ACG subdomain we have host permission for.
+  // Chrome only needs the URL to domain-match the cookie being removed.
+  const host = (cookieDomain === "aaa.com" || cookieDomain === "acg.aaa.com")
+    ? "www.acg.aaa.com"
+    : cookieDomain;
+
+  return `https://${host}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+async function removeCookieAtCandidateUrls(name) {
+  let removed = 0;
+  const urls = [ACG_COOKIE_URL, "https://acg.aaa.com/", "https://www.acg.aaa.com/"];
+
+  // Repeated passes handle cases where both host-only and .aaa.com cookies share a name.
+  for (let pass = 0; pass < 3; pass++) {
+    for (const url of urls) {
+      try {
+        const result = await chrome.cookies.remove({ url, name });
+        if (result) removed++;
+      } catch { /* ignore candidate failures */ }
+    }
+  }
+
+  return removed;
+}
+
+async function removeCookiesByName(names) {
+  let removed = 0;
+  const errors = [];
+
+  for (const name of names) {
+    let matches = [];
+    try {
+      matches = await chrome.cookies.getAll({ name });
+    } catch (e) {
+      // Fallback keeps the switcher usable even if broad getAll is blocked by host permissions.
+      removed += await removeCookieAtCandidateUrls(name);
+      continue;
+    }
+
+    for (const cookie of matches) {
+      try {
+        const url = cookieRemovalUrl(cookie);
+        if (!isAllowedHost(url)) continue;
+        await chrome.cookies.remove({ url, name, storeId: cookie.storeId });
+        removed++;
+      } catch (e) {
+        errors.push(`${name}: remove failed (${e?.message || e})`);
+      }
+    }
+
+    removed += await removeCookieAtCandidateUrls(name);
+  }
+
+  return { removed, errors };
+}
+
+async function applyCoreStateCookies(profile, tabUrl, tabId) {
+  const stateCode = profileStateCode(profile);
+  const deviceCode = await readCurrentDeviceCode(tabUrl);
+  const expirationDate = expirationDaysFromNow(365);
+  const zipcodeValue = `${profile.zip}|AAA|${profile.clubCode}|${deviceCode}`;
+
+  // ACG now expects the zip-only workflow. Clear the old source cookies first
+  // so the ACG zip modal/lookup is allowed to recalculate the region.
+  const cleanup = await removeCookiesByName(CORE_STATE_COOKIE_NAMES);
+
+  const payload = await saveStateKeeperOverride(stateCode, zipcodeValue, profile.zip, profile.name);
+  await installPageStateOverride(tabId, payload);
+
+  const details = [
+    // Seed only the geo helpers. Do not seed AEM.state/zipcode here, because
+    // those can suppress the official zip prompt and leave stale MI logic alive.
+    secureAcgHostCookieDetails("https://www.acg.aaa.com/", "_lr_geo_location_state", stateCode, expirationDate),
+    secureAcgHostCookieDetails("https://acg.aaa.com/", "_lr_geo_location_state", stateCode, expirationDate),
+    secureAcgHostCookieDetails("https://www.acg.aaa.com/", "_lr_geo_location", "US", expirationDate),
+    secureAcgHostCookieDetails("https://acg.aaa.com/", "_lr_geo_location", "US", expirationDate),
+    secureAcgDomainCookieDetails("_lr_geo_location_state", stateCode, expirationDate),
+    secureAcgDomainCookieDetails("_lr_geo_location", "US", expirationDate)
+  ];
+
+  let ok = 0;
+  let fail = 0;
+  const errors = [...cleanup.errors];
+
+  for (const det of details) {
+    try {
+      await chrome.cookies.set(det);
+      ok++;
+    } catch (e) {
+      fail++;
+      errors.push(`${det.name}: set failed (${e?.message || e})`);
+    }
+  }
+
+  const nextUrl = urlWithZipGateParams(tabUrl, profile.zip, stateCode);
+  return { ok, fail, errors, removed: cleanup.removed, zipcodeValue, stateCode, zip: profile.zip, nextUrl, payload };
+}
+
+/* ---------- Helpers kept after removing legacy captured-cookie bundle support. ---------- */
+const DOMAIN_ALLOWLIST = ["aaa.com", "acg.aaa.com", "meemic.com", "meemicfoundation.org"];
+function isAllowedHost(url) {
+  try {
+    const u = new URL(url);
+    const h = u.hostname.toLowerCase();
+    return DOMAIN_ALLOWLIST.some(d => {
+      d = d.toLowerCase().replace(/^\./, "");
+      return h === d || h.endsWith("." + d);
+    });
+  } catch {
+    return false;
+  }
+}
+function toast(el, msg, ok = true) {
+  if (!el) return;
+  el.className = `msg ${ok ? "ok" : "err"}`;
+  el.textContent = msg;
+}
+
+/* ---------- Legacy captured-cookie bundle support removed in v1.86. ---------- */
 /* ---------- Tabs (cleaner popup UI) ---------- */
 function setActiveTab(tabName) {
   const tabs = Array.from(document.querySelectorAll('.tab'));
@@ -2132,18 +2454,28 @@ async function copyStrategistSuggestion() {
 
 document.getElementById('applyBtn')?.addEventListener('click', async () => {
   const msgEl=document.getElementById('stateMsg');
-  
+
   // Hard guard: do nothing if disabled
   if (document.getElementById('applyBtn').disabled) return;
 
   try{
-    const sel=document.getElementById('stateSelect');const state=sel?.value?.trim();
-    if(!state){toast(msgEl,"Pick a state first.",false);return;}
-    const {json:cookies,path}=await fetchFirstCookieFile(state);
-    const {ok,fail,errors}=await applyCookies(cookies);
-    if(fail===0)toast(msgEl,`Applied ${ok} cookies ✔ (${path})`,true);
-    else{const summary=errors.slice(0,6).join(" • ");toast(msgEl,`Applied ${ok}; ${fail} failed. ${summary}${errors.length>6?" • …":""}`,false);}
-    setTimeout(()=>{chrome.tabs.query({active:true,currentWindow:true},(tabs)=>{const id=tabs?.[0]?.id;if(id)chrome.tabs.reload(id,{bypassCache:true});});window.close();},1000);
+    const sel=document.getElementById('stateSelect');
+    const state=sel?.value?.trim();
+    const profile = profileForStateName(state);
+    if(!profile){toast(msgEl,"Pick a state first.",false);return;}
+
+    const tab = await getActiveTab();
+    const result = await applyCoreStateCookies(profile, tab?.url, tab?.id);
+
+    if(result.fail===0){
+      toast(msgEl,`Starting ACG zip lookup for ${result.stateCode} using ${result.zip} ✔`,true);
+      setCurrentStatePill(result.stateCode);
+    } else {
+      const summary=result.errors.slice(0,6).join(" • ");
+      toast(msgEl,`State switch partly applied. Set ${result.ok}; ${result.fail} failed. ${summary}${result.errors.length>6?" • …":""}`,false);
+    }
+
+    setTimeout(()=>{chrome.tabs.query({active:true,currentWindow:true},(tabs)=>{const id=tabs?.[0]?.id;if(id)chrome.tabs.update(id,{url:result.nextUrl});});window.close();},1000);
   }catch(err){console.error('State apply error:',err);toast(msgEl,err?.message||"Error applying state cookies",false);}
 });
 

@@ -1,1 +1,24 @@
-This extension will change your State location and cookie values while on the acg.aaa.com website. This is for testing purposes only!
+# ACG Utilities State Switcher v1.86
+
+Developer utility for ACG/AAA web testing.
+
+## What it does
+
+- Switches ACG regional state behavior by launching ACG's current zip-only lookup flow.
+- Opens quick links for ACG, Meemic, Meemic Foundation, and AEM Author environments.
+- Generates local, template-based Adobe Target/A/B test ideas from the active tab.
+- Shows an optional AEM Author environment badge.
+
+## Privacy
+
+The extension runs locally in the browser. It does not send browsing data, cookies, page content, custom ideas, or selected states to any external server. It stores only local preferences such as selected tab, theme, badge settings, custom A/B ideas, and the temporary selected ACG state/ZIP override used during switching.
+
+## Store review notes
+
+- Manifest V3.
+- No remotely hosted code.
+- No eval/new Function.
+- No captured cookie bundles are packaged.
+- Host access is limited to AAA/ACG pages needed for the state switcher and the specific AEM Author hosts needed for the author badge.
+
+Not affiliated with AAA or its subsidiaries unless submitted by an authorized publisher.
