@@ -305,6 +305,10 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   display: none !important;
 }
 .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.state-action-row { grid-template-columns: 1fr; }
+.state-action-row #applyBtn { width: 100%; }
+.kv-one-two { grid-template-columns: 1fr 1fr; }
+.compact-hint { margin: 0; align-self: end; }
 .suggestion { display: none; margin-top: 12px; }
 .suggestion pre { margin: 0; white-space: pre-wrap; font-size: 12px; line-height: 1.35; color: var(--fg); }
 .details { margin-top: 10px; }

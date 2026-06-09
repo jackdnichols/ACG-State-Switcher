@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ACG Utilities State Switcher",
-  "version": "1.86",
-  "description": "Developer utility for ACG pages: switch ACG state using the current zip-only flow, open environment links, generate local A/B test ideas, and show an author badge.",
+  "version": "1.94",
+  "description": "Developer utility for ACG pages: switch state by ZIP, open env links, generate local A/B ideas, and show an author badge.",
   "permissions": [
     "storage",
     "scripting",

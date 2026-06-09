@@ -47,7 +47,9 @@
         </select>
 
         <div class="spacer"></div>
-        <button id="applyBtn" type="button" title="Switch the active ACG tab using the selected state's ZIP profile.">Switch State</button>
+        <div class="btn-row state-action-row">
+          <button id="applyBtn" type="button" title="Switch the active ACG tab using the selected state's ZIP profile.">Switch State</button>
+        </div>
         <div id="stateLockNote" class="hint" style="display:none">
           State cookies can only be applied when the active tab is on <strong>acg.aaa.com</strong> (or its subdomains).
         </div>
@@ -134,10 +136,15 @@
           <div>
             <div class="label" title="Used to choose the idea templates. Quote is the default.">Page type</div>
             <select id="strategistPageType" title="Choose the template pack to generate ideas from.">
-              <option value="quote" selected>Quote</option>
-              <option value="billing">Billing</option>
-              <option value="donate">Donate</option>
-              <option value="login">Login</option>
+              <option value="auto" selected>Auto detect</option>
+              <option value="quote">Quote / Lead Gen</option>
+              <option value="membership">Membership</option>
+              <option value="billing">Billing / Pay Bill</option>
+              <option value="donate">Donate / Foundation</option>
+              <option value="login">Login / Account</option>
+              <option value="travel">Travel</option>
+              <option value="discounts">Discounts</option>
+              <option value="content">Article / Content</option>
               <option value="generic">Generic</option>
             </select>
           </div>
@@ -149,11 +156,27 @@
             <input id="strategistIdeaCount" type="number" min="3" max="50" value="18" title="Generate this many idea cards." />
           </div>
           <div>
+            <div class="label" title="Use this to rank the generated test ideas.">Primary goal</div>
+            <select id="strategistGoal" title="Prioritizes ideas for the selected experiment goal.">
+              <option value="conversion" selected>Increase conversion</option>
+              <option value="form">Improve form completion</option>
+              <option value="engagement">Improve engagement</option>
+              <option value="revenue">Increase revenue/value</option>
+              <option value="support">Reduce support/friction</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="kv kv-one-two">
+          <div>
             <div class="label" title="If checked, includes your saved custom ideas in the output.">Include custom ideas</div>
             <label class="toggle" title="When enabled, your saved custom ideas are merged into the generated bundle.">
               <input id="strategistIncludeCustom" type="checkbox" checked />
               <span>Use my saved ideas</span>
             </label>
+          </div>
+          <div class="hint compact-hint" title="Ideas are ranked by expected impact, effort, and confidence using the current page signals.">
+            Ideas are now ranked by priority, not just shuffled.
           </div>
         </div>
 

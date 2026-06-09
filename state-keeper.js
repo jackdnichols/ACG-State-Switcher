@@ -1,6 +1,8 @@
 // state-keeper.js — drives ACG's new zip-only state flow.
-// Instead of only forcing AEM.state, it fills the official zip prompt when it
-// appears and lets ACG's own zip lookup service generate the state cookies.
+// It fills the official zip prompt when it appears and lets ACG's own zip
+// lookup service generate the state cookies. Source cookies are cleared only
+// from the popup before navigation; clearing them again on every page load can
+// cause visible flashes/repeated zip-gate passes in Chrome.
 (() => {
   "use strict";
 
@@ -16,6 +18,16 @@
   let activePayload = null;
   let fastTimer = null;
   let slowTimer = null;
+
+  function cleanSwitcherMarkerFromUrl() {
+    try {
+      const u = new URL(window.location.href);
+      if (!u.searchParams.has("acgStateSwitcher")) return;
+      u.searchParams.delete("acgStateSwitcher");
+      const cleanUrl = `${u.pathname}${u.search}${u.hash}`;
+      window.history.replaceState(window.history.state, document.title, cleanUrl);
+    } catch {}
+  }
 
   function safeValue(value) {
     return String(value ?? "").replace(/[;\r\n]/g, "").trim();
@@ -106,8 +118,10 @@
     const submittedKey = `__acgStateSwitcherZipSubmitted:${p.nonce}`;
     if (sessionStorage.getItem(submittedKey)) return false;
 
-    const input = document.querySelector("#zipCode, input[name='zipCode'], input[placeholder*='Zip']");
-    const button = document.querySelector("#go, input#go, button#go, input[value='Continue'], button[type='submit']");
+    const inputs = Array.from(document.querySelectorAll("#zipCode, input[name='zipCode'], input[placeholder*='Zip']"));
+    const buttons = Array.from(document.querySelectorAll("#go, input#go, button#go, input[value='Continue'], button[type='submit']"));
+    const input = inputs.find(visibleEnough);
+    const button = buttons.find(el => visibleEnough(el) && !el.disabled);
     if (!input || !button) return false;
 
     setInputValue(input, p.zip);
@@ -131,6 +145,11 @@
 
     writeCookie("AEM.state", p.stateCode, { domain: ".aaa.com" });
     writeCookie("zipcode", p.zipcodeValue, { domain: ".aaa.com" });
+    // Also align host-specific copies if Chrome/ACG left one behind from a
+    // previous state. Matching duplicates are harmless; mismatched duplicates
+    // can make DevTools/document.cookie look split-brained.
+    writeCookie("AEM.state", p.stateCode);
+    writeCookie("zipcode", p.zipcodeValue);
     writeCookie("_lr_geo_location_state", p.stateCode, { sameSiteNone: true });
     writeCookie("_lr_geo_location", p.countryValue, { sameSiteNone: true });
     writeCookie("_lr_geo_location_state", p.stateCode, { domain: ".aaa.com", sameSiteNone: true });
@@ -167,6 +186,17 @@
     slowTimer = null;
   }
 
+  function clearLocalOverride() {
+    activePayload = null;
+    stopTimers();
+    try { window.localStorage.removeItem(PAGE_STORAGE_KEY); } catch {}
+    try {
+      Object.keys(window.sessionStorage || {})
+        .filter(key => key.startsWith("__acgStateSwitcherZipSubmitted:"))
+        .forEach(key => window.sessionStorage.removeItem(key));
+    } catch {}
+  }
+
   function scheduleWrites(payload) {
     const p = normalizedPayload(payload);
     if (!p) return;
@@ -175,11 +205,10 @@
     syncPageLocalStorage(p);
     stopTimers();
 
-    // Make sure stale source cookies do not prevent the zip modal path.
-    removeCookie("AEM.state");
-    removeCookie("zipcode");
-    removeCookie("currenturl");
-    removeCookie("zipgate-deeplink-data");
+    // Do not clear AEM.state/zipcode here. The popup already clears stale
+    // source cookies once before navigating into the zip flow. Re-clearing on
+    // every page load makes Chrome visibly bounce through ACG's zip gate a few
+    // times before settling.
 
     [0, 50, 250, 750, 1500, 3000, 6000, 10000, 15000, 22000, 30000].forEach(delay => {
       setTimeout(() => reassert(activePayload), delay);
@@ -219,10 +248,25 @@
   }
 
   chrome.storage?.onChanged?.addListener((changes, areaName) => {
-    if (areaName !== "local" || !changes[KEY]?.newValue) return;
+    if (areaName !== "local" || !changes[KEY]) return;
+    if (!changes[KEY].newValue) {
+      clearLocalOverride();
+      return;
+    }
     const payload = normalizedPayload(changes[KEY].newValue);
     if (payload) scheduleWrites(payload);
+    else clearLocalOverride();
   });
 
+  try {
+    chrome.runtime?.onMessage?.addListener((msg, sender, sendResponse) => {
+      if (msg?.type !== "ACG_CLEAR_STATE_KEEPER") return;
+      clearLocalOverride();
+      sendResponse?.({ ok: true });
+      return true;
+    });
+  } catch {}
+
+  cleanSwitcherMarkerFromUrl();
   loadStoredPayload();
 })();

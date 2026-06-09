@@ -57,19 +57,19 @@ const STATE_CODE_TO_NAME = {
 const STATE_PROFILES = {
   "Colorado":       { code: "CO", zip: "80012", clubCode: "6" },
   "Florida":        { code: "FL", zip: "33601", clubCode: "14" },
-  "Georgia":        { code: "GA", zip: "33592", clubCode: "14" },
+  "Georgia":        { code: "GA", zip: "30303", clubCode: "14" },
   "Illinois":       { code: "IL", zip: "61525", clubCode: "20" },
-  "Indiana":        { code: "IN", zip: "61525", clubCode: "20" },
-  "Iowa":           { code: "IA", zip: "50102", clubCode: "49" },
+  "Indiana":        { code: "IN", zip: "46204", clubCode: "20" },
+  "Iowa":           { code: "IA", zip: "50309", clubCode: "49" },
   "Michigan":       { code: "MI", zip: "48237", clubCode: "47" },
   "Minnesota":      { code: "MN", zip: "55101", clubCode: "49" },
-  "Nebraska":       { code: "NE", zip: "68336", clubCode: "69" },
+  "Nebraska":       { code: "NE", zip: "68102", clubCode: "69" },
   "North Carolina": { code: "NC", zip: "28105", clubCode: "111" },
   "North Dakota":   { code: "ND", zip: "58102", clubCode: "113" },
   "Puerto Rico":    { code: "PR", zip: "00901", clubCode: "714" },
   "South Carolina": { code: "SC", zip: "29401", clubCode: "111" },
-  "Tennessee":      { code: "TN", zip: "37617", clubCode: "14" },
-  "Wisconsin":      { code: "WI", zip: "53558", clubCode: "270" }
+  "Tennessee":      { code: "TN", zip: "37203", clubCode: "14" },
+  "Wisconsin":      { code: "WI", zip: "53703", clubCode: "270" }
 };
 
 const STATE_CODE_TO_PROFILE = Object.fromEntries(
@@ -151,6 +151,17 @@ function deriveStateCodeFromZipcodeCookie(zipCookieValue) {
 }
 
 async function readCurrentStateFromCookies(tabUrl) {
+  // If the user just switched state, prefer the active extension override for
+  // the popup pill. The page cookies may briefly show both old and new values
+  // while ACG's zip lookup and our cleanup finish.
+  try {
+    const result = await chrome.storage.local.get([ACG_STATE_KEEPER_KEY]);
+    const payload = result?.[ACG_STATE_KEEPER_KEY];
+    const overrideCode = normalizeStateCode(payload?.stateCode);
+    const expiresAt = Number(payload?.expiresAt || 0);
+    if (overrideCode && (!expiresAt || Date.now() <= expiresAt)) return overrideCode;
+  } catch { /* cookie fallback below */ }
+
   const aemState = normalizeStateCode(await readCookieValueFromAnyAllowedUrl(tabUrl, 'AEM.state'));
   if (aemState) return aemState;
 
@@ -258,8 +269,9 @@ async function saveStateKeeperOverride(stateCode, zipcodeValue, zip, stateName) 
     countryValue: "US",
     nonce: `${stateCode}-${Date.now()}`,
     updatedAt: now,
-    // Let the ACG zip lookup run first. The background/content fallback starts after this.
-    deferUntil: now + 20000,
+    // Let the ACG zip lookup run first, but do not make the user wait.
+    // Older builds waited ~20 seconds here, which made Chrome feel stalled.
+    deferUntil: now + 4000,
     expiresAt: now + (60 * 60 * 1000)
   };
   try {
@@ -290,13 +302,11 @@ function urlWithZipGateParams(urlString, zip, stateCode) {
     const u = new URL(urlString || ACG_COOKIE_URL);
     u.searchParams.set("zip", String(zip || ""));
     u.searchParams.set("stateprov", String(stateCode || "").toUpperCase());
-    u.searchParams.set("acgStateSwitcher", "1");
     return u.toString();
   } catch {
     const u = new URL(ACG_COOKIE_URL);
     u.searchParams.set("zip", String(zip || ""));
     u.searchParams.set("stateprov", String(stateCode || "").toUpperCase());
-    u.searchParams.set("acgStateSwitcher", "1");
     return u.toString();
   }
 }
@@ -329,6 +339,19 @@ async function removeCookieAtCandidateUrls(name) {
   }
 
   return removed;
+}
+
+async function removeCookiesByNameFast(names) {
+  // Fast path for the button click. The slower broad duplicate cleanup now runs
+  // in the background/state keeper after navigation, so Chrome does not sit
+  // on the popup for 10+ seconds before the page starts changing.
+  const results = await Promise.allSettled(names.map(name => removeCookieAtCandidateUrls(name)));
+  return {
+    removed: results.reduce((sum, r) => sum + (r.status === "fulfilled" ? Number(r.value || 0) : 0), 0),
+    errors: results
+      .filter(r => r.status === "rejected")
+      .map(r => String(r.reason?.message || r.reason || "cookie removal failed"))
+  };
 }
 
 async function removeCookiesByName(names) {
@@ -368,16 +391,23 @@ async function applyCoreStateCookies(profile, tabUrl, tabId) {
   const expirationDate = expirationDaysFromNow(365);
   const zipcodeValue = `${profile.zip}|AAA|${profile.clubCode}|${deviceCode}`;
 
-  // ACG now expects the zip-only workflow. Clear the old source cookies first
-  // so the ACG zip modal/lookup is allowed to recalculate the region.
-  const cleanup = await removeCookiesByName(CORE_STATE_COOKIE_NAMES);
+  // Fast cleanup only. Broad duplicate cleanup continues in the background
+  // after navigation so the first click feels immediate in Chrome.
+  const cleanup = await removeCookiesByNameFast(CORE_STATE_COOKIE_NAMES);
 
   const payload = await saveStateKeeperOverride(stateCode, zipcodeValue, profile.zip, profile.name);
   await installPageStateOverride(tabId, payload);
 
   const details = [
-    // Seed only the geo helpers. Do not seed AEM.state/zipcode here, because
-    // those can suppress the official zip prompt and leave stale MI logic alive.
+    // Seed the selected state immediately so the first reload starts in the
+    // right place instead of waiting for the fallback repair window. The URL
+    // still carries zip/stateprov so ACG's official zip flow can confirm it.
+    plainAcgDomainCookieDetails("AEM.state", stateCode, expirationDate),
+    plainAcgDomainCookieDetails("zipcode", zipcodeValue, expirationDate),
+    secureAcgHostCookieDetails("https://www.acg.aaa.com/", "AEM.state", stateCode, expirationDate),
+    secureAcgHostCookieDetails("https://acg.aaa.com/", "AEM.state", stateCode, expirationDate),
+    secureAcgHostCookieDetails("https://www.acg.aaa.com/", "zipcode", zipcodeValue, expirationDate),
+    secureAcgHostCookieDetails("https://acg.aaa.com/", "zipcode", zipcodeValue, expirationDate),
     secureAcgHostCookieDetails("https://www.acg.aaa.com/", "_lr_geo_location_state", stateCode, expirationDate),
     secureAcgHostCookieDetails("https://acg.aaa.com/", "_lr_geo_location_state", stateCode, expirationDate),
     secureAcgHostCookieDetails("https://www.acg.aaa.com/", "_lr_geo_location", "US", expirationDate),
@@ -824,6 +854,75 @@ function targetHowTo(i) {
   return `In Adobe Target VEC: find the element${hint} and make the single change described in Variant (B).`;
 }
 
+function clampScore(n, min = 1, max = 5) {
+  const x = Number.isFinite(+n) ? +n : min;
+  return Math.max(min, Math.min(max, Math.round(x)));
+}
+
+function goalLabel(goal) {
+  const labels = {
+    conversion: "Increase conversion",
+    form: "Improve form completion",
+    engagement: "Improve engagement",
+    revenue: "Increase revenue/value",
+    support: "Reduce support/friction"
+  };
+  return labels[String(goal || "conversion").toLowerCase()] || labels.conversion;
+}
+
+function classifyIdeaPriority(i, context = {}) {
+  const hay = [
+    i?.title, i?.change, i?.test, i?.hypothesis, i?.variantA, i?.variantB,
+    ...(Array.isArray(i?.tags) ? i.tags : [])
+  ].filter(Boolean).join(" ").toLowerCase();
+  const goal = String(context.goal || "conversion").toLowerCase();
+  const pageType = String(context.pageType || "generic").toLowerCase();
+
+  let impact = 3;
+  let confidence = 3;
+  let effort = 2;
+
+  if (/cta|headline|h1|subhead|copy|label|button/.test(hay)) {
+    impact += 1;
+    confidence += 1;
+    effort -= 1;
+  }
+  if (/form|field|step|submit|progress|flow|quote/.test(hay)) {
+    impact += 1;
+    effort += 1;
+  }
+  if (/sticky|exit|modal|rescue|layout|single-column|module|faq|image|photo/.test(hay)) {
+    effort += 1;
+  }
+  if (/trust|reassurance|privacy|no obligation|what happens next|agent|help/.test(hay)) {
+    confidence += 1;
+  }
+  if (/color|contrast|style/.test(hay)) {
+    confidence -= 1;
+  }
+
+  if (goal === "form" && /form|field|step|submit|progress|flow/.test(hay)) impact += 1;
+  if (goal === "engagement" && /content|article|faq|module|guide|nav|findability|top tasks/.test(hay)) impact += 1;
+  if (goal === "revenue" && /quote|bundle|upgrade|join|membership|discount|travel|donat|payment|autopay/.test(hay)) impact += 1;
+  if (goal === "support" && /help|faq|agent|login|billing|what happens next|privacy|error|assist/.test(hay)) impact += 1;
+
+  if (pageType && pageType !== "generic" && hay.includes(pageType)) confidence += 1;
+
+  impact = clampScore(impact);
+  confidence = clampScore(confidence);
+  effort = clampScore(effort);
+  const score = (impact * 2) + confidence - effort;
+  const label = score >= 10 ? "High" : (score >= 8 ? "Medium" : "Low");
+
+  return { impact, confidence, effort, score, label };
+}
+
+function priorityText(i) {
+  const p = i?.__priority || classifyIdeaPriority(i);
+  return `${p.label} priority (Impact ${p.impact}/5, Confidence ${p.confidence}/5, Effort ${p.effort}/5)`;
+}
+
+
 function renderStrategistIdeas(ideas) {
   const list = document.getElementById("strategistIdeaList");
   if (!list) return;
@@ -868,7 +967,8 @@ function renderStrategistIdeas(ideas) {
 
     const meta = document.createElement("div");
     meta.className = "idea-meta";
-    const tags = [i.activityType, i.audience].filter(Boolean);
+    const pr = i.__priority || classifyIdeaPriority(i);
+    const tags = [i.activityType, pr ? `${pr.label} priority` : "", i.audience].filter(Boolean);
     (i.tags || []).forEach(t => tags.push(String(t)));
     tags.slice(0, 6).forEach(t => {
       const tag = document.createElement("span");
@@ -902,6 +1002,7 @@ function renderStrategistIdeas(ideas) {
     const measure = i.kpi || i.measure;
     const guard = i.guardrails || i.guardrail;
 
+    addKV("Priority", priorityText(i));
     addKV("Placement", i.placement);
     addKV("Test", test);
     if (why && String(why).length <= 140) addKV("Why", why);
@@ -934,6 +1035,7 @@ function formatIdeaForClipboard(i, idx) {
   return [
     `Target Idea #${idx}: ${title}`,
     `Activity: ${activityType}`,
+    `Priority: ${priorityText(i)}`,
     `Audience: ${audience}`,
     placement ? `Placement: ${placement}` : "",
     test ? `Test: ${test}` : "",
@@ -1417,6 +1519,7 @@ async function scanStrategist() {
       ctaText: (data.ctaText || ""),
       ctaHref: (data.ctaHref || ""),
       ctaSelector: (data.ctaSelector || ""),
+      ctaStyle: (data.ctaStyle || {}),
       formCount: Number.isFinite(+data.formCount) ? +data.formCount : 0,
       formSelector: (data.formSelector || ""),
       health: (data.health || {}),
@@ -1561,13 +1664,28 @@ function buildSuggestionsFromScan(s, opts = {}) {
 
   const hay = `${page} ${pathname} ${h1} ${ctaText}`.toLowerCase();
   const inferredQuote = /quote|get\s*a\s*quote|start\s*quote|auto\s*quote|home\s*quote|bundle|insurance/.test(hay);
+  const isMembership = /membership|join|renew|roadside|tow|member/.test(hay);
   const isBilling = /pay|billing|payment|autopay|paperless|invoice/.test(hay);
   const isDonate = /donate|donation|give|foundation|grant/.test(hay);
   const isLogin = /login|log\s*in|sign\s*in|account/.test(hay);
+  const isTravel = /travel|hotel|cruise|vacation|trip|rental\s*car|tour/.test(hay);
+  const isDiscounts = /discount|deal|savings|ticket|restaurant|entertainment/.test(hay);
+  const isContent = /blog|article|guide|connect|story|publication|webcast|podcast/.test(hay);
   const isSearchOrNav = /search|find|locations|agents|contact/.test(hay);
 
-  const pageType = String(opts.pageType || '').toLowerCase() ||
-    (inferredQuote ? 'quote' : (isBilling ? 'billing' : (isDonate ? 'donate' : (isLogin ? 'login' : (isSearchOrNav ? 'nav' : 'generic')))));
+  const inferredPageType = inferredQuote ? 'quote'
+    : (isMembership ? 'membership'
+    : (isBilling ? 'billing'
+    : (isDonate ? 'donate'
+    : (isLogin ? 'login'
+    : (isTravel ? 'travel'
+    : (isDiscounts ? 'discounts'
+    : (isContent ? 'content'
+    : (isSearchOrNav ? 'nav' : 'generic'))))))));
+
+  const requestedPageType = String(opts.pageType || 'auto').toLowerCase();
+  const pageType = (!requestedPageType || requestedPageType === 'auto') ? inferredPageType : requestedPageType;
+  const goal = String(opts.goal || 'conversion').toLowerCase();
 
   const ideaCount = Math.max(3, Math.min(50, parseInt(opts.ideaCount ?? 18, 10) || 18));
   const includeCustom = !!opts.includeCustom;
@@ -1602,7 +1720,7 @@ function buildSuggestionsFromScan(s, opts = {}) {
 
     return [
       `• ${title}`,
-      `  Activity: ${activityType} | Audience: ${audience}`,
+      `  Activity: ${activityType} | Priority: ${priorityText(i)} | Audience: ${audience}`,
       placement ? `  Placement: ${placement}` : '',
       `  Test: ${test}`,
       (why && String(why).length <= 140) ? `  Why: ${why}` : '',
@@ -2365,6 +2483,114 @@ function buildSuggestionsFromScan(s, opts = {}) {
     }
   ];
 
+  const membershipIdeas = [
+    {
+      title: "Membership level comparison simplifier",
+      activityType: "A/B",
+      audience: "Prospective members",
+      placement: "Membership comparison area",
+      hypothesis: "A simpler 'best for' framing helps visitors choose a plan faster.",
+      variantA: "Current membership comparison.",
+      variantB: "Add a short 'Best for...' line to each membership tier and emphasize the recommended option.",
+      kpi: "Join starts / completed joins",
+      guardrails: "Plan mix, support clicks",
+      tags: ["membership", "join"]
+    },
+    {
+      title: "Roadside value proof near Join CTA",
+      activityType: "A/B",
+      audience: "Prospective members",
+      placement: "Near primary Join CTA",
+      hypothesis: "Concrete roadside benefits reduce hesitation and increase joins.",
+      variantA: "Join CTA without nearby benefit proof.",
+      variantB: "Add 2 concise benefit bullets near the Join CTA, such as towing help and battery service.",
+      kpi: "Join CTA click-through",
+      guardrails: "Bounce, plan comparison clicks",
+      tags: ["membership", "cta"]
+    }
+  ];
+
+  const travelIdeas = [
+    {
+      title: "Trip intent chooser",
+      activityType: "A/B",
+      audience: "Travel visitors",
+      placement: "Above the fold",
+      hypothesis: "Letting users self-select their trip goal reduces browsing friction.",
+      variantA: "Standard travel landing content.",
+      variantB: "Add quick chips: Hotels, Cruises, Tours, Rental Cars, Travel Insurance.",
+      kpi: "Travel product click-through",
+      guardrails: "Scroll depth, bounce",
+      tags: ["travel", "nav"]
+    },
+    {
+      title: "Advisor help as secondary CTA",
+      activityType: "A/B",
+      audience: "Travel visitors",
+      placement: "Near booking CTA",
+      hypothesis: "A clear advisor/help path increases action for visitors not ready to self-book.",
+      variantA: "Booking CTA only.",
+      variantB: "Keep the booking CTA primary and add a subtle 'Talk to a travel advisor' link.",
+      kpi: "Booking starts + advisor leads",
+      guardrails: "Primary booking CTA clicks",
+      tags: ["travel", "support"]
+    }
+  ];
+
+  const discountIdeas = [
+    {
+      title: "Local deals first",
+      activityType: "A/B",
+      audience: "Discounts visitors",
+      placement: "Top of discounts page",
+      hypothesis: "Showing nearby deals first increases engagement and perceived value.",
+      variantA: "Generic discounts layout.",
+      variantB: "Add a top module for 'Deals near you' using the visitor's selected ZIP/state context.",
+      kpi: "Deal clicks / offer opens",
+      guardrails: "Search refinements, zero-result rate",
+      tags: ["discounts", "engagement"]
+    },
+    {
+      title: "Savings category chips",
+      activityType: "A/B",
+      audience: "Discounts visitors",
+      placement: "Above discount listings",
+      hypothesis: "Category shortcuts help visitors reach relevant offers faster.",
+      variantA: "Standard filters only.",
+      variantB: "Add quick chips for Restaurants, Travel, Entertainment, Automotive, Shopping.",
+      kpi: "Category clicks / offer opens",
+      guardrails: "Filter usage, bounce",
+      tags: ["discounts", "nav"]
+    }
+  ];
+
+  const contentIdeas = [
+    {
+      title: "Related next step module",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "End of article or right rail",
+      hypothesis: "A relevant next step turns passive readers into task completers.",
+      variantA: "Article ends without a strong next step.",
+      variantB: "Add a small related-action card connected to the article topic.",
+      kpi: "Related CTA click-through",
+      guardrails: "Article completion/scroll depth",
+      tags: ["content", "engagement"]
+    },
+    {
+      title: "Article summary box",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "Below H1 / intro",
+      hypothesis: "A concise summary helps visitors confirm relevance and continue reading.",
+      variantA: "Standard article intro.",
+      variantB: "Add a 3-bullet 'In this article' summary box.",
+      kpi: "Scroll depth / time on page",
+      guardrails: "CTA clicks, bounce",
+      tags: ["content", "copy"]
+    }
+  ];
+
   const navIdeas = [
     {
       title: "Findability: top tasks module",
@@ -2382,16 +2608,29 @@ function buildSuggestionsFromScan(s, opts = {}) {
 
   let pool = [...universalIdeas];
   if (pageType === 'quote') pool = pool.concat(quoteIdeas);
+  else if (pageType === 'membership') pool = pool.concat(membershipIdeas);
   else if (pageType === 'billing') pool = pool.concat(billingIdeas);
   else if (pageType === 'donate') pool = pool.concat(donateIdeas);
   else if (pageType === 'login') pool = pool.concat(loginIdeas);
+  else if (pageType === 'travel') pool = pool.concat(travelIdeas);
+  else if (pageType === 'discounts') pool = pool.concat(discountIdeas);
+  else if (pageType === 'content') pool = pool.concat(contentIdeas);
   else if (pageType === 'nav') pool = pool.concat(navIdeas);
 
   if (includeCustom && customIdeas.length) pool = pool.concat(customIdeas);
 
-  // Shuffle, then take the requested count.
-  const shuffled = shuffleDeterministic(pool, `${url}|${page}|${pageType}`);
-  const chosen = shuffled.slice(0, Math.min(ideaCount, shuffled.length));
+  // Shuffle first for variety, then rank so the best bets rise to the top.
+  const ranked = shuffleDeterministic(pool, `${url}|${page}|${pageType}|${goal}`)
+    .map((idea, idx) => ({
+      ...idea,
+      __shuffleIndex: idx,
+      __priority: classifyIdeaPriority(idea, { pageType, goal })
+    }))
+    .sort((a, b) => {
+      const scoreDiff = (b.__priority?.score || 0) - (a.__priority?.score || 0);
+      return scoreDiff || ((a.__shuffleIndex || 0) - (b.__shuffleIndex || 0));
+    });
+  const chosen = ranked.slice(0, Math.min(ideaCount, ranked.length));
 
   // --- Instrumentation warning ---
   const missingNote = (!s.hasDD && !s.hasS && !s.hasAlloy)
@@ -2403,9 +2642,9 @@ function buildSuggestionsFromScan(s, opts = {}) {
     `Brand: ${brand} | Env: ${env}`,
     `URL: ${url}`,
     `Page: ${page || "(unknown)"}`,
-    `Page type: ${pageType}`,
+    `Page type: ${pageType}${requestedPageType === 'auto' ? ` (auto-detected from ${inferredPageType})` : ''}`,
+    `Primary goal: ${goalLabel(goal)}`,
     `Signals: ${signals}`,
-    healthLine,
     healthLine,
     (pathname ? `Path: ${pathname}` : ""),
     (h1 ? `H1: ${h1}` : ""),
@@ -2431,7 +2670,7 @@ function buildSuggestionsFromScan(s, opts = {}) {
   return {
     text,
     ideas: chosen,
-    meta: { brand, env, url, page, pageType, signals }
+    meta: { brand, env, url, page, pageType, goal, signals }
   };
 }
 
@@ -2452,31 +2691,86 @@ async function copyStrategistSuggestion() {
   }
 }
 
+async function clearStateOverride(tabId) {
+  try { await chrome.storage.local.remove(ACG_STATE_KEEPER_KEY); } catch {}
+
+  if (tabId) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        world: "MAIN",
+        args: [PAGE_STATE_OVERRIDE_KEY],
+        func: (key) => {
+          try { window.localStorage.removeItem(key); } catch {}
+          try {
+            Object.keys(window.sessionStorage || {})
+              .filter(k => k.startsWith("__acgStateSwitcherZipSubmitted:"))
+              .forEach(k => window.sessionStorage.removeItem(k));
+          } catch {}
+        }
+      });
+    } catch { /* page injection is best-effort */ }
+
+    try {
+      await chrome.tabs.sendMessage(tabId, { type: "ACG_CLEAR_STATE_KEEPER" });
+    } catch { /* content script may not be present on non-ACG tabs */ }
+  }
+
+  try { await chrome.runtime.sendMessage({ type: "ACG_CLEAR_STATE_KEEPER" }); } catch {}
+}
+
+let stateSwitchInFlight = false;
+
 document.getElementById('applyBtn')?.addEventListener('click', async () => {
-  const msgEl=document.getElementById('stateMsg');
+  const msgEl = document.getElementById('stateMsg');
+  const btn = document.getElementById('applyBtn');
 
-  // Hard guard: do nothing if disabled
-  if (document.getElementById('applyBtn').disabled) return;
+  // Make the click idempotent. Older builds left the button active for a
+  // second before reloading, which made it feel like a double-click was needed.
+  if (stateSwitchInFlight || btn?.disabled) return;
 
-  try{
-    const sel=document.getElementById('stateSelect');
-    const state=sel?.value?.trim();
-    const profile = profileForStateName(state);
-    if(!profile){toast(msgEl,"Pick a state first.",false);return;}
-
-    const tab = await getActiveTab();
-    const result = await applyCoreStateCookies(profile, tab?.url, tab?.id);
-
-    if(result.fail===0){
-      toast(msgEl,`Starting ACG zip lookup for ${result.stateCode} using ${result.zip} ✔`,true);
-      setCurrentStatePill(result.stateCode);
-    } else {
-      const summary=result.errors.slice(0,6).join(" • ");
-      toast(msgEl,`State switch partly applied. Set ${result.ok}; ${result.fail} failed. ${summary}${result.errors.length>6?" • …":""}`,false);
+  const originalText = btn?.textContent || 'Switch State';
+  try {
+    stateSwitchInFlight = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Switching…';
     }
 
-    setTimeout(()=>{chrome.tabs.query({active:true,currentWindow:true},(tabs)=>{const id=tabs?.[0]?.id;if(id)chrome.tabs.update(id,{url:result.nextUrl});});window.close();},1000);
-  }catch(err){console.error('State apply error:',err);toast(msgEl,err?.message||"Error applying state cookies",false);}
+    const sel = document.getElementById('stateSelect');
+    const state = sel?.value?.trim();
+    const profile = profileForStateName(state);
+    if (!profile) {
+      toast(msgEl, "Pick a state first.", false);
+      return;
+    }
+
+    const tab = await getActiveTab();
+    if (!tab?.id) throw new Error('No active tab found. Open an ACG page and try again.');
+
+    const result = await applyCoreStateCookies(profile, tab.url, tab.id);
+
+    if (result.fail === 0) {
+      toast(msgEl, `Switching to ${result.stateCode} using ZIP ${result.zip} ✔`, true);
+      setCurrentStatePill(result.stateCode);
+    } else {
+      const summary = result.errors.slice(0, 6).join(" • ");
+      toast(msgEl, `State switch partly applied. Set ${result.ok}; ${result.fail} failed. ${summary}${result.errors.length > 6 ? " • …" : ""}`, false);
+    }
+
+    // Navigate the same active tab immediately after the cookie/storage work
+    // finishes. Do not wait on a visible countdown; that pause invited double-clicks.
+    await chrome.tabs.update(tab.id, { url: result.nextUrl });
+    window.close();
+  } catch (err) {
+    console.error('State apply error:', err);
+    toast(msgEl, err?.message || "Error applying state cookies", false);
+    stateSwitchInFlight = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
 });
 
 /* ---------- Env Websites + Author (unchanged from your last working) ---------- */
@@ -2623,12 +2917,13 @@ document.getElementById('strategistGenerate')?.addEventListener('click', async (
     if (note) note.textContent = "Nothing to generate. Open a supported page and rescan.";
     return;
   }
-  const pageType = document.getElementById('strategistPageType')?.value || 'quote';
+  const pageType = document.getElementById('strategistPageType')?.value || 'auto';
+  const goal = document.getElementById('strategistGoal')?.value || 'conversion';
   const ideaCount = document.getElementById('strategistIdeaCount')?.value || 18;
   const includeCustom = !!document.getElementById('strategistIncludeCustom')?.checked;
   const customText = includeCustom ? await loadCustomIdeaText() : '';
   const customIdeas = includeCustom ? parseCustomIdeas(customText) : [];
-  const result = buildSuggestionsFromScan(strategistLast, { pageType, ideaCount, includeCustom, customIdeas });
+  const result = buildSuggestionsFromScan(strategistLast, { pageType, goal, ideaCount, includeCustom, customIdeas });
   setStrategistUi({ suggestion: result?.text || "", ideas: result?.ideas || [], note: "Ideas generated." });
 });
 

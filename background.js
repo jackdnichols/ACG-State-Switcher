@@ -1,6 +1,8 @@
 // background.js — shared popup wiring + ACG state cookie fallback watchdog
-// v1.86 uses ACG's zip-only flow first. The watchdog waits briefly before
+// v1.94 uses ACG's zip-only flow first. The watchdog waits briefly before
 // falling back to direct cookie repair so the official zip lookup can win.
+// It also removes stale duplicate state cookies so DevTools/document.cookie
+// do not show conflicting AEM.state values from earlier switches.
 
 const ACG_STATE_KEEPER_KEY = "acgStateKeeper";
 const VALID_STATE = /^[A-Z]{2}$/;
@@ -62,6 +64,17 @@ function secureDomainCookie(name, value) {
   };
 }
 
+function plainHostCookie(url, name, value) {
+  return {
+    url,
+    name,
+    value: clean(value),
+    path: "/",
+    secure: false,
+    expirationDate: Math.floor(Date.now() / 1000) + ONE_YEAR_SECONDS
+  };
+}
+
 function secureHostCookie(url, name, value) {
   return {
     url,
@@ -72,6 +85,44 @@ function secureHostCookie(url, name, value) {
     sameSite: "no_restriction",
     expirationDate: Math.floor(Date.now() / 1000) + ONE_YEAR_SECONDS
   };
+}
+
+function cookieRemovalUrl(cookie) {
+  const cookieDomain = String(cookie?.domain || "www.acg.aaa.com").replace(/^\./, "").toLowerCase();
+  const path = (cookie?.path && String(cookie.path)) || "/";
+  const host = (cookieDomain === "aaa.com" || cookieDomain === "acg.aaa.com")
+    ? "www.acg.aaa.com"
+    : cookieDomain;
+  return `https://${host}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+async function removeMismatchedStateCookies(payload) {
+  if (!payload) return;
+
+  for (const name of WATCHED_NAMES) {
+    let matches = [];
+    try {
+      matches = await chrome.cookies.getAll({ name });
+    } catch {
+      continue;
+    }
+
+    for (const cookie of matches) {
+      const domain = String(cookie?.domain || "").toLowerCase();
+      if (!domain.endsWith("aaa.com")) continue;
+      if (cookieMatchesPayload(cookie, payload)) continue;
+
+      try {
+        await chrome.cookies.remove({
+          url: cookieRemovalUrl(cookie),
+          name,
+          storeId: cookie.storeId
+        });
+      } catch {
+        // Best-effort cleanup. The following set calls still align the main cookies.
+      }
+    }
+  }
 }
 
 let repairInFlight = false;
@@ -87,9 +138,18 @@ async function repairStateCookies(reason = "watchdog") {
   if (repairInFlight) return;
   repairInFlight = true;
 
+  await removeMismatchedStateCookies(payload);
+
   const writes = [
     plainDomainCookie("AEM.state", payload.stateCode),
     plainDomainCookie("zipcode", payload.zipcodeValue),
+    // Keep any host-specific duplicates aligned too. A stale host cookie can
+    // appear beside the .aaa.com cookie in Chrome and make document.cookie read
+    // an old value like IL after switching to MN.
+    plainHostCookie("https://www.acg.aaa.com/", "AEM.state", payload.stateCode),
+    plainHostCookie("https://acg.aaa.com/", "AEM.state", payload.stateCode),
+    plainHostCookie("https://www.acg.aaa.com/", "zipcode", payload.zipcodeValue),
+    plainHostCookie("https://acg.aaa.com/", "zipcode", payload.zipcodeValue),
     secureDomainCookie("_lr_geo_location_state", payload.stateCode),
     secureDomainCookie("_lr_geo_location", payload.countryValue),
     secureHostCookie("https://www.acg.aaa.com/", "_lr_geo_location_state", payload.stateCode),
@@ -115,6 +175,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === "ACG_REPAIR_STATE_COOKIES") {
     repairStateCookies("message").then(() => sendResponse?.({ ok: true }));
+    return true;
+  }
+
+  if (msg.type === "ACG_CLEAR_STATE_KEEPER") {
+    chrome.storage.local.remove(ACG_STATE_KEEPER_KEY)
+      .then(() => sendResponse?.({ ok: true }))
+      .catch(error => sendResponse?.({ ok: false, error: String(error?.message || error) }));
     return true;
   }
 });
