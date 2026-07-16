@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ACG Utilities State Switcher",
   "version": "1.98",
-  "description": "Developer utility for ACG pages: switch state by ZIP, open env links, generate local A/B ideas, show an author badge, and run a Site Inspector (env link leaks, broken images, spelling, word search) on acg.aaa.com/meemic.com/meemicfoundation.org.",
+  "description": "Dev tool for ACG/Meemic: state switch by ZIP, env links, A/B idea generator, author badge, broken link/image/spelling scanner.",
   "permissions": [
     "storage",
     "scripting",
