@@ -1950,18 +1950,6 @@ function buildSuggestionsFromScan(s, opts = {}) {
     },
     // More "to the point" quote tests (Target VEC-friendly)
     {
-      title: "CTA button color (high contrast)",
-      activityType: "A/B",
-      audience: "All visitors",
-      placement: ctaSelector ? `CTA button (${ctaSelector})` : "Primary CTA button",
-      change: "Change the primary CTA button color to a higher-contrast accent",
-      variantA: "Keep current CTA button color",
-      variantB: "Use AAA blue (or a warm accent) with white text; increase contrast and keep the rest unchanged",
-      kpi: "CTA clicks → quote starts",
-      guardrails: "Bounce, misclicks",
-      tags: ["quote","cta","color"]
-    },
-    {
       title: "CTA button style (filled vs outline)",
       activityType: "A/B",
       audience: "All visitors",
