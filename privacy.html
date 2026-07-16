@@ -21,6 +21,9 @@
   <h2>Cookie access</h2>
   <p>The extension reads and writes only the cookies needed for its user-facing ACG state-switching feature, such as <code>AEM.state</code>, <code>zipcode</code>, and related ACG location cookies. Cookie access is used only to make the selected ACG state take effect in the current browser session.</p>
 
+  <h2>Site Inspector</h2>
+  <p>The Site Inspector tool fetches pages, images, and scripts from acg.aaa.com, meemic.com, and meemicfoundation.org (and their subdomains) that the user starts a scan against, so it can check for broken links/images, environment leaks, spelling issues, and search terms. This is hard-scoped in code to those three sites — no setting can make it fetch or send credentials to any other domain. Scan results stay in the browser tab and are only written to disk if the user clicks a CSV export button; nothing is transmitted to any external server.</p>
+
   <h2>Remote code</h2>
   <p>The extension does not load or execute remotely hosted code. Its functionality is contained in the submitted extension package.</p>
 

@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="header">
-    <div class="brand" title="Quick utilities for AAA/ACG sites: state cookies, environment links, Target strategist, and an env badge.">ACG Utilities</div>
+    <div class="brand" title="Quick utilities for AAA/ACG sites: state cookies, environment links, Target strategist, an env badge, and a Site Inspector.">ACG Utilities <span id="extVersion" class="version"></span></div>
 
     <div class="theme-switch" role="group" aria-label="Theme" title="Switch the popup theme only (does not affect websites).">
       <button id="themeLight"  aria-pressed="false" type="button" title="Use a light theme in the popup">Light</button>
@@ -96,6 +96,17 @@
           <a class="chip" href="https://university.tealium.com/learn/home" target="_blank" rel="noopener" title="Open Tealium University">Tealium U</a>
         </div>
       </section>
+
+      <section class="card">
+        <div class="row-between">
+          <h3>Site Inspector</h3>
+          <span class="help" tabindex="0" role="img" aria-label="Help" title="Scans acg.aaa.com, meemic.com, and meemicfoundation.org pages for broken links, broken images, and dev/qa/stage links left on production. Opens in a new tab; never fetches any other domain.">?</span>
+        </div>
+        <div class="hint">Broken link/image and env-leak scanner, scoped to acg.aaa.com, meemic.com, and meemicfoundation.org.</div>
+        <div class="row">
+          <button id="openSiteInspector" type="button" title="Open the Site Inspector in a new tab">Open Site Inspector</button>
+        </div>
+      </section>
     </section>
 
     <!-- =====================
@@ -145,6 +156,7 @@
               <option value="travel">Travel</option>
               <option value="discounts">Discounts</option>
               <option value="content">Article / Content</option>
+              <option value="nav">Search / Locator / Nav</option>
               <option value="generic">Generic</option>
             </select>
           </div>
@@ -255,6 +267,7 @@
     Not affiliated with AAA or its subsidiaries. Author: Jack Nichols
   </footer>
 
+  <script src="cookie-utils.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

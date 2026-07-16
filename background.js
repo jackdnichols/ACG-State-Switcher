@@ -4,6 +4,8 @@
 // It also removes stale duplicate state cookies so DevTools/document.cookie
 // do not show conflicting AEM.state values from earlier switches.
 
+importScripts("cookie-utils.js");
+
 const ACG_STATE_KEEPER_KEY = "acgStateKeeper";
 const VALID_STATE = /^[A-Z]{2}$/;
 const VALID_ZIP_COOKIE = /^[0-9]{5}\|AAA\|[0-9]+\|(PC|SP|TB)$/;
@@ -87,15 +89,6 @@ function secureHostCookie(url, name, value) {
   };
 }
 
-function cookieRemovalUrl(cookie) {
-  const cookieDomain = String(cookie?.domain || "www.acg.aaa.com").replace(/^\./, "").toLowerCase();
-  const path = (cookie?.path && String(cookie.path)) || "/";
-  const host = (cookieDomain === "aaa.com" || cookieDomain === "acg.aaa.com")
-    ? "www.acg.aaa.com"
-    : cookieDomain;
-  return `https://${host}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
 async function removeMismatchedStateCookies(payload) {
   if (!payload) return;
 
@@ -167,11 +160,6 @@ async function repairStateCookies(reason = "watchdog") {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg !== "object") return;
-
-  if (msg.type === "ENSURE_TOP_INJECT") {
-    sendResponse?.({ ok: true });
-    return true;
-  }
 
   if (msg.type === "ACG_REPAIR_STATE_COOKIES") {
     repairStateCookies("message").then(() => sendResponse?.({ ok: true }));

@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Site Inspector - ACG Utilities</title>
+
+<style>
+  :root {
+    --bg: #f4f7fb;
+    --card: #ffffff;
+    --text: #172033;
+    --muted: #64748b;
+    --line: #d9e2ef;
+    --line-strong: #c4d2e4;
+    --blue: #2563eb;
+    --blue-soft: #eaf2ff;
+    --blue-text: #1d4ed8;
+    --green-soft: #ecfdf3;
+    --green-text: #027a48;
+    --red-soft: #fff1f2;
+    --red-text: #b42318;
+    --shadow: 0 12px 30px rgba(15, 23, 42, .08);
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Arial, sans-serif;
+  }
+
+  .wrap {
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+
+  .hero {
+    background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: 22px;
+    margin-bottom: 18px;
+  }
+
+  .hero h1 { margin: 0 0 6px; font-size: 28px; }
+  .hero p { margin: 0; color: var(--muted); line-height: 1.45; }
+
+  .scope-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--blue-soft);
+    color: var(--blue-text);
+    border: 1px solid #cfe0ff;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .note {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+
+  .card-body { padding: 16px; }
+
+  label { display: block; font-weight: 700; margin-bottom: 6px; font-size: 14px; }
+
+  .help { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+  input[type="text"],
+  input[type="number"],
+  select,
+  textarea {
+    width: 100%;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+    background: #fff;
+    color: #0f172a;
+  }
+
+  textarea { min-height: 84px; resize: vertical; }
+
+  input[type="checkbox"] { width: 16px; height: 16px; margin: 0; }
+
+  .field { margin-bottom: 14px; }
+
+  .grid-2, .grid-3, .grid-4 { display: grid; gap: 12px; }
+  .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+  .check-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border: 1px solid #e8eef7;
+    border-radius: 12px;
+    background: #fcfdff;
+    margin-bottom: 10px;
+  }
+
+  .check-item strong { display: block; font-size: 13px; margin-bottom: 2px; }
+  .check-item .sub { font-size: 11px; color: var(--muted); line-height: 1.35; }
+
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  button {
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-weight: 700;
+    cursor: pointer;
+    background: var(--blue);
+    color: #fff;
+    font-size: 13px;
+  }
+
+  button:hover { filter: brightness(.98); }
+  button:disabled { opacity: .6; cursor: not-allowed; }
+  button.secondary { background: #6b7280; color: #fff; }
+  button.ghost { background: var(--blue-soft); color: var(--blue-text); border: 1px solid #cfe0ff; }
+  button.danger { background: #dc2626; }
+
+  .top-bar {
+    display: grid;
+    grid-template-columns: 160px 1fr 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+
+  .global-summary {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .quick-domains { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+  @media (max-width: 900px) {
+    .top-bar { grid-template-columns: 1fr; }
+    .quick-domains { grid-template-columns: 1fr; }
+  }
+
+  .stat {
+    background: #fcfdff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    min-height: 50px;
+  }
+
+  .stat .k {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    margin-bottom: 4px;
+  }
+
+  .stat .v { font-size: 16px; font-weight: 800; word-break: break-word; }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    background: transparent;
+    color: var(--muted);
+    border-radius: 10px 10px 0 0;
+    padding: 10px 18px;
+    font-weight: 700;
+  }
+
+  .tab-btn.active {
+    background: var(--card);
+    color: var(--blue-text);
+    border: 1px solid var(--line);
+    border-bottom-color: var(--card);
+    margin-bottom: -1px;
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .status {
+    background: var(--blue-soft);
+    color: #12356b;
+    border: 1px solid #cfe0ff;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 12px 0;
+    white-space: pre-wrap;
+    font-size: 13px;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  @media (max-width: 900px) {
+    .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  .section-title { font-weight: 700; font-size: 15px; margin: 14px 0 8px; }
+
+  .results {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    min-height: 120px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 4px 12px;
+  }
+
+  .empty { color: var(--muted); padding: 16px 0; text-align: center; }
+
+  .result { padding: 10px 0; border-bottom: 1px solid #eef2f8; font-size: 13px; }
+  .result:last-child { border-bottom: 0; }
+  .result .bad { color: var(--red-text); font-weight: 700; word-break: break-all; }
+  .result .meta { font-size: 12px; color: #9a3412; margin-top: 2px; }
+  .result .source { font-size: 12px; color: #475569; margin-top: 2px; }
+  .result .page { font-size: 12px; color: var(--muted); word-break: break-all; margin-top: 2px; }
+
+  .log-panel { margin-top: 14px; }
+  .log-head { background: #0f172a; color: #e5e7eb; padding: 8px 14px; font-weight: 700; font-size: 12px; border-radius: 12px 12px 0 0; }
+  .log {
+    background: #020617;
+    color: #e5e7eb;
+    padding: 12px 14px;
+    min-height: 90px;
+    max-height: 220px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    border-radius: 0 0 12px 12px;
+  }
+
+  @media (max-width: 720px) {
+    body { padding: 12px; }
+    .grid-2, .grid-3, .grid-4, .summary-grid { grid-template-columns: 1fr; }
+    .toolbar, .quick-domains { flex-direction: column; }
+    .toolbar button { width: 100%; }
+  }
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>Site Inspector</h1>
+    <p>Four scanners ported from the Tealium Site QA Scanner: lower-environment link leaks, missing images, spelling/typos, and free-text word search.</p>
+    <div class="scope-note">Hard-scoped in code to acg.aaa.com, meemic.com, and meemicfoundation.org (and their subdomains).</div>
+    <div class="note">Runs as an extension tab, not injected into the page, so requests to these sites are cross-site fetches. Cookies marked SameSite=Lax/Strict on the target site (the default for most session cookies) will not be sent, so scans see the same content a logged-out visitor would even if you're signed in on another tab.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="top-bar">
+        <div class="field" style="margin-bottom:0;">
+          <label for="maxPages">Max pages</label>
+          <input id="maxPages" type="number" min="1" max="5000" step="1" value="500" />
+        </div>
+
+        <div class="global-summary">
+          <div class="stat"><div class="k">Status</div><div class="v" id="globalStatus">Ready</div></div>
+          <div class="stat"><div class="k">Page cache</div><div class="v" id="globalCacheCount">0</div></div>
+        </div>
+
+        <div class="toolbar" style="align-items:stretch;">
+          <button id="runBothBtn" style="flex:1;">Run all</button>
+          <button id="stopBothBtn" class="danger" style="flex:1;">Stop all</button>
+        </div>
+      </div>
+
+      <div class="quick-domains" style="margin-top:14px;">
+        <button id="domainAcgBtn" class="ghost">Use acg.aaa.com</button>
+        <button id="domainMeemicBtn" class="ghost">Use meemic.com</button>
+        <button id="domainFoundationBtn" class="ghost">Use meemicfoundation.org</button>
+      </div>
+      <div class="help">Fills the Start URL field on every tab. This tool fetches these sites directly — you do not need to have them open in another tab.</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button id="tabLowerBtn" class="tab-btn active">Lower Env Links</button>
+    <button id="tabImagesBtn" class="tab-btn">Missing Images</button>
+    <button id="tabSpellBtn" class="tab-btn">Spell Check</button>
+    <button id="tabWordBtn" class="tab-btn">Word Search</button>
+  </div>
+
+  <!-- ============ Lower Environment Link Scanner ============ -->
+  <div id="lowerPanel" class="tab-panel active">
+    <div class="card">
+      <div class="card-body">
+        <div class="field">
+          <label for="lowerStart">Start URL</label>
+          <input id="lowerStart" type="text" />
+          <div class="help">Must be on acg.aaa.com, meemic.com, or meemicfoundation.org. Crawl stays on this origin.</div>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label for="lowerPatterns">Lower environment link patterns</label>
+          <textarea id="lowerPatterns"></textarea>
+          <div class="help">One pattern per line. Reports links on same-origin pages that match a lower-environment pattern.</div>
+        </div>
+        <div class="toolbar" style="margin-top:14px;">
+          <button id="lowerScanBtn">Start link scan</button>
+          <button id="lowerStopBtn" class="secondary">Stop link scan</button>
+          <button id="lowerExportBtn" class="ghost">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="lowerStatus" class="status">Ready</div>
+
+    <div class="section-title">Link scan summary</div>
+    <div class="summary-grid">
+      <div class="stat"><div class="k">Status</div><div class="v" id="lowerSumStatus">Ready</div></div>
+      <div class="stat"><div class="k">Duration</div><div class="v" id="lowerSumDuration">0s</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="lowerSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="lowerSumQueued">0</div></div>
+      <div class="stat"><div class="k">Links checked</div><div class="v" id="lowerSumChecked">0</div></div>
+      <div class="stat"><div class="k">Matches</div><div class="v" id="lowerSumFindings">0</div></div>
+      <div class="stat"><div class="k">Skipped</div><div class="v" id="lowerSumSkipped">0</div></div>
+      <div class="stat"><div class="k">Errors</div><div class="v" id="lowerSumErrors">0</div></div>
+    </div>
+
+    <div class="section-title">Lower environment link results</div>
+    <div id="lowerResults" class="results"><div class="empty">No results yet.</div></div>
+
+    <div class="log-panel">
+      <div class="log-head">Link scanner log</div>
+      <div id="lowerLog" class="log"></div>
+    </div>
+  </div>
+
+  <!-- ============ Missing Image Scanner ============ -->
+  <div id="imagesPanel" class="tab-panel">
+    <div class="card">
+      <div class="card-body">
+        <div class="field">
+          <label for="imageStart">Start URL</label>
+          <input id="imageStart" type="text" />
+          <div class="help">Must be on acg.aaa.com, meemic.com, or meemicfoundation.org. Crawl stays on this origin.</div>
+        </div>
+        <div class="field">
+          <label for="imageIgnorePatterns">Ignore image URL patterns</label>
+          <textarea id="imageIgnorePatterns"></textarea>
+          <div class="help">Optional. One pattern per line. Matching image URLs are skipped.</div>
+        </div>
+        <div class="check-item">
+          <input type="checkbox" id="includeCssImages" checked />
+          <div><strong>Include inline CSS background images</strong></div>
+        </div>
+        <div class="check-item">
+          <input type="checkbox" id="includeMetaImages" checked />
+          <div><strong>Include meta/link images</strong><div class="sub">og:image, twitter:image, icons, preload images.</div></div>
+        </div>
+        <div class="check-item" style="margin-bottom:0;">
+          <input type="checkbox" id="imageSkipRedirectedPages" checked />
+          <div><strong>Skip image checks on redirected page URLs</strong><div class="sub">Recommended: redirected pages are logged and skipped, while the final same-origin URL is queued back into the crawl when possible.</div></div>
+        </div>
+        <div class="toolbar" style="margin-top:14px;">
+          <button id="imageScanBtn">Start image scan</button>
+          <button id="imageStopBtn" class="secondary">Stop image scan</button>
+          <button id="imageExportBtn" class="ghost">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="imageStatus" class="status">Ready</div>
+
+    <div class="section-title">Image scan summary</div>
+    <div class="summary-grid">
+      <div class="stat"><div class="k">Status</div><div class="v" id="imageSumStatus">Ready</div></div>
+      <div class="stat"><div class="k">Duration</div><div class="v" id="imageSumDuration">0s</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="imageSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="imageSumQueued">0</div></div>
+      <div class="stat"><div class="k">Images checked</div><div class="v" id="imageSumChecked">0</div></div>
+      <div class="stat"><div class="k">Missing</div><div class="v" id="imageSumFindings">0</div></div>
+      <div class="stat"><div class="k">Redirects</div><div class="v" id="imageSumRedirected">0</div></div>
+      <div class="stat"><div class="k">Skipped</div><div class="v" id="imageSumSkipped">0</div></div>
+      <div class="stat"><div class="k">Errors</div><div class="v" id="imageSumErrors">0</div></div>
+    </div>
+
+    <div class="section-title">Missing image results</div>
+    <div id="imageResults" class="results"><div class="empty">No results yet.</div></div>
+
+    <div class="log-panel">
+      <div class="log-head">Image scanner log</div>
+      <div id="imageLog" class="log"></div>
+    </div>
+  </div>
+
+  <!-- ============ Spell Checker ============ -->
+  <div id="spellPanel" class="tab-panel">
+    <div class="card">
+      <div class="card-body">
+        <div class="field">
+          <label for="spellStart">Start URL</label>
+          <input id="spellStart" type="text" />
+          <div class="help">Must be on acg.aaa.com, meemic.com, or meemicfoundation.org. Crawl stays on this origin.</div>
+        </div>
+        <div class="field">
+          <label for="spellIgnoreWords">Approved / ignored words</label>
+          <textarea id="spellIgnoreWords"></textarea>
+          <div class="help">One word per line. Use for AAA terms, product names, acronyms, locations, and intentional copy the scanner should not report.</div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="spellMinLength">Minimum word length</label>
+            <input id="spellMinLength" type="number" min="2" max="20" step="1" value="4" />
+          </div>
+          <div class="field">
+            <label for="spellMaxFindings">Max spell findings</label>
+            <input id="spellMaxFindings" type="number" min="25" max="5000" step="25" value="300" />
+          </div>
+        </div>
+        <div class="check-item">
+          <input type="checkbox" id="spellFlagUnknown" />
+          <div><strong>Also flag unknown words as review candidates</strong><div class="sub">Browser-only spell checking cannot use Chrome's private dictionary, so this mode is intentionally noisy.</div></div>
+        </div>
+        <div class="check-item">
+          <input type="checkbox" id="spellMainContentOnly" checked />
+          <div><strong>Prefer main article/content text when available</strong></div>
+        </div>
+        <div class="check-item">
+          <input type="checkbox" id="spellSkipDataText" checked />
+          <div><strong>Ignore JSON, keyword arrays, and data blobs</strong></div>
+        </div>
+        <div class="check-item" style="margin-bottom:0;">
+          <input type="checkbox" id="spellIncludeMetaText" checked />
+          <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
+        </div>
+        <div class="toolbar" style="margin-top:14px;">
+          <button id="spellScanBtn">Start spell check</button>
+          <button id="spellStopBtn" class="secondary">Stop spell check</button>
+          <button id="spellExportBtn" class="ghost">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="spellStatus" class="status">Ready</div>
+
+    <div class="section-title">Spell check summary</div>
+    <div class="summary-grid">
+      <div class="stat"><div class="k">Status</div><div class="v" id="spellSumStatus">Ready</div></div>
+      <div class="stat"><div class="k">Duration</div><div class="v" id="spellSumDuration">0s</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="spellSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="spellSumQueued">0</div></div>
+      <div class="stat"><div class="k">Words checked</div><div class="v" id="spellSumChecked">0</div></div>
+      <div class="stat"><div class="k">Findings</div><div class="v" id="spellSumFindings">0</div></div>
+      <div class="stat"><div class="k">Skipped</div><div class="v" id="spellSumSkipped">0</div></div>
+      <div class="stat"><div class="k">Errors</div><div class="v" id="spellSumErrors">0</div></div>
+    </div>
+
+    <div class="section-title">Spell check results</div>
+    <div id="spellResults" class="results"><div class="empty">No results yet.</div></div>
+
+    <div class="log-panel">
+      <div class="log-head">Spell checker log</div>
+      <div id="spellLog" class="log"></div>
+    </div>
+  </div>
+
+  <!-- ============ Word Search ============ -->
+  <div id="wordPanel" class="tab-panel">
+    <div class="card">
+      <div class="card-body">
+        <div class="field">
+          <label for="wordStart">Start URL</label>
+          <input id="wordStart" type="text" />
+          <div class="help">Must be on acg.aaa.com, meemic.com, or meemicfoundation.org. Crawl stays on this origin.</div>
+        </div>
+        <div class="field">
+          <label for="wordTerms">Words / phrases to search</label>
+          <textarea id="wordTerms"></textarea>
+          <div class="help">One word or phrase per line. Searches visible page copy and reports page/source/context matches.</div>
+        </div>
+        <div class="field">
+          <label for="wordMaxFindings">Max word search findings</label>
+          <input id="wordMaxFindings" type="number" min="25" max="5000" step="25" value="500" />
+        </div>
+        <div class="check-item">
+          <input type="checkbox" id="wordCaseSensitive" />
+          <div><strong>Case-sensitive search</strong></div>
+        </div>
+        <div class="check-item">
+          <input type="checkbox" id="wordWholeWord" checked />
+          <div><strong>Match whole words for single-word searches</strong></div>
+        </div>
+        <div class="check-item">
+          <input type="checkbox" id="wordMainContentOnly" checked />
+          <div><strong>Prefer main article/content text when available</strong></div>
+        </div>
+        <div class="check-item" style="margin-bottom:0;">
+          <input type="checkbox" id="wordIncludeMetaText" checked />
+          <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
+        </div>
+        <div class="toolbar" style="margin-top:14px;">
+          <button id="wordScanBtn">Start word search</button>
+          <button id="wordStopBtn" class="secondary">Stop word search</button>
+          <button id="wordExportBtn" class="ghost">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="wordStatus" class="status">Ready</div>
+
+    <div class="section-title">Word search summary</div>
+    <div class="summary-grid">
+      <div class="stat"><div class="k">Status</div><div class="v" id="wordSumStatus">Ready</div></div>
+      <div class="stat"><div class="k">Duration</div><div class="v" id="wordSumDuration">0s</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="wordSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="wordSumQueued">0</div></div>
+      <div class="stat"><div class="k">Term checks</div><div class="v" id="wordSumChecked">0</div></div>
+      <div class="stat"><div class="k">Matches</div><div class="v" id="wordSumFindings">0</div></div>
+      <div class="stat"><div class="k">Skipped</div><div class="v" id="wordSumSkipped">0</div></div>
+      <div class="stat"><div class="k">Errors</div><div class="v" id="wordSumErrors">0</div></div>
+    </div>
+
+    <div class="section-title">Word search results</div>
+    <div id="wordResults" class="results"><div class="empty">No results yet.</div></div>
+
+    <div class="log-panel">
+      <div class="log-head">Word search log</div>
+      <div id="wordLog" class="log"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="site-inspector.js"></script>
+</body>
+</html>

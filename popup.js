@@ -2,6 +2,9 @@
 // ACG Utilities State Switcher — popup.js
 // ===============================
 
+const extVersionEl = document.getElementById('extVersion');
+if (extVersionEl) extVersionEl.textContent = `v${chrome.runtime.getManifest().version}`;
+
 // Popup UI storage keys
 const POPUP_TAB_KEY = "popupActiveTab";
 const STRATEGIST_CUSTOM_KEY = "strategistCustomIdeas";
@@ -311,18 +314,9 @@ function urlWithZipGateParams(urlString, zip, stateCode) {
   }
 }
 
-function cookieRemovalUrl(cookie) {
-  const cookieDomain = String(cookie?.domain || "www.acg.aaa.com").replace(/^\./, "").toLowerCase();
-  const path = (cookie?.path && String(cookie.path)) || "/";
-
-  // For .aaa.com cookies, use an ACG subdomain we have host permission for.
-  // Chrome only needs the URL to domain-match the cookie being removed.
-  const host = (cookieDomain === "aaa.com" || cookieDomain === "acg.aaa.com")
-    ? "www.acg.aaa.com"
-    : cookieDomain;
-
-  return `https://${host}${path.startsWith("/") ? path : `/${path}`}`;
-}
+// cookieRemovalUrl() lives in cookie-utils.js, loaded via a <script> tag in
+// popup.html before this file, so it's shared with background.js instead of
+// kept in sync by hand.
 
 async function removeCookieAtCandidateUrls(name) {
   let removed = 0;
@@ -2450,6 +2444,114 @@ function buildSuggestionsFromScan(s, opts = {}) {
       kpi: "Successful payments / autopay enroll",
       guardrails: "Support clicks, errors",
       tags: ["billing"]
+    },
+    {
+      title: "Due date + amount banner up top",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Top of billing page",
+      hypothesis: "Surfacing the due date and amount immediately reduces scanning and late payments.",
+      variantA: "Due date/amount only inside the account summary.",
+      variantB: "Add a banner at the top of the page with due date, amount, and a direct Pay Now link.",
+      kpi: "On-time payments",
+      guardrails: "Support clicks",
+      tags: ["billing"]
+    },
+    {
+      title: "One-click 'Pay in full' shortcut",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Payment options",
+      hypothesis: "A single-click full-payment path reduces drop-off versus the multi-step flow.",
+      variantA: "Standard multi-step payment flow for every payment type.",
+      variantB: "Add a 'Pay in full now' shortcut button above the standard flow for eligible balances.",
+      kpi: "Payment completion rate",
+      guardrails: "Partial-payment usage, errors",
+      tags: ["billing", "flow"]
+    },
+    {
+      title: "Simplify payment method selector",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Payment method step",
+      hypothesis: "Fewer visible choices at once reduces hesitation on the payment method step.",
+      variantA: "All payment methods shown expanded at once.",
+      variantB: "Show the last-used method first; collapse other methods under 'Use a different method'.",
+      kpi: "Step completion",
+      guardrails: "Method-switch rate, errors",
+      tags: ["billing", "form"]
+    },
+    {
+      title: "Progress indicator on multi-step payment",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Payment flow header",
+      hypothesis: "Showing how many steps remain reduces mid-flow abandonment.",
+      variantA: "No step indicator.",
+      variantB: "Add a simple 'Step 2 of 3' progress indicator to the payment flow.",
+      kpi: "Flow completion rate",
+      guardrails: "Back-button usage",
+      tags: ["billing", "flow", "form"]
+    },
+    {
+      title: "Security trust badge near card entry",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Near card number field",
+      hypothesis: "Visible security reassurance right at the sensitive field reduces hesitation to submit.",
+      variantA: "Card entry with no nearby reassurance.",
+      variantB: "Add a small 'Secure payment' badge/lock icon directly above the card field.",
+      kpi: "Payment starts / completion",
+      guardrails: "Support clicks",
+      tags: ["billing", "trust"]
+    },
+    {
+      title: "Itemized amount breakdown",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Payment summary",
+      hypothesis: "A clear breakdown of what's owed and why reduces confusion-driven support calls.",
+      variantA: "Single total amount shown.",
+      variantB: "Add a short itemized breakdown (premium, fees, prior balance) above the total.",
+      kpi: "Support contact rate, payment completion",
+      guardrails: "Time on page",
+      tags: ["billing", "copy"]
+    },
+    {
+      title: "Clearer error messaging on failed payments",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Payment error state",
+      hypothesis: "Specific, actionable error copy reduces repeat failed attempts and abandonment.",
+      variantA: "Generic 'Payment failed, try again' message.",
+      variantB: "Specific message per failure type (declined, expired card, invalid CVV) with a clear next step.",
+      kpi: "Retry success rate",
+      guardrails: "Support clicks",
+      tags: ["billing", "copy"]
+    },
+    {
+      title: "Mobile sticky 'Pay Now' bar",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Mobile viewport only",
+      hypothesis: "Keeping payment action available on mobile reduces hunting and abandonment.",
+      variantA: "No sticky action on mobile.",
+      variantB: "Sticky bottom bar with amount due and a Pay Now button.",
+      kpi: "Mobile payment completion",
+      guardrails: "Accidental taps",
+      tags: ["billing", "mobile"]
+    },
+    {
+      title: "High-contrast primary payment button",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Payment summary CTA",
+      hypothesis: "A higher-contrast primary button draws the eye to the intended action first.",
+      variantA: "Current button color/contrast.",
+      variantB: "Higher-contrast button color for the primary payment action only.",
+      kpi: "Primary action click-through",
+      guardrails: "None expected; visual-only change",
+      tags: ["billing", "color"]
     }
   ];
 
@@ -2465,6 +2567,114 @@ function buildSuggestionsFromScan(s, opts = {}) {
       kpi: "Donation starts / completed donations",
       guardrails: "Completion rate",
       tags: ["donate"]
+    },
+    {
+      title: "Monthly giving as the default toggle",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Donation module",
+      hypothesis: "Defaulting to monthly (with an easy one-time switch) increases recurring donor sign-ups.",
+      variantA: "One-time donation selected by default.",
+      variantB: "Monthly selected by default, with a clear 'switch to one-time' option.",
+      kpi: "Recurring donation starts",
+      guardrails: "Total donation starts, opt-out rate",
+      tags: ["donate"]
+    },
+    {
+      title: "Where your donation goes module",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Near donation form",
+      hypothesis: "Transparency about fund use increases trust and completed donations.",
+      variantA: "No breakdown of fund use near the ask.",
+      variantB: "Add a short module: 'X% goes directly to Y' with 2-3 concrete impact bullets.",
+      kpi: "Donation completion rate",
+      guardrails: "Time on page",
+      tags: ["donate", "trust"]
+    },
+    {
+      title: "Simplify donation form to fewer fields",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Donation form",
+      hypothesis: "Fewer required fields up front reduces abandonment on the donation form.",
+      variantA: "Full billing/contact form shown at once.",
+      variantB: "Amount + payment first; defer optional fields (employer match, dedication) to a second step.",
+      kpi: "Form completion rate",
+      guardrails: "Data completeness for optional fields",
+      tags: ["donate", "form"]
+    },
+    {
+      title: "Employer match reminder",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Donation form / confirmation",
+      hypothesis: "Reminding donors their gift may be matched increases perceived impact and repeat giving.",
+      variantA: "No mention of employer matching.",
+      variantB: "Add a short note: 'Your gift may be matched by your employer' with a lookup link.",
+      kpi: "Match lookup clicks",
+      guardrails: "None expected",
+      tags: ["donate", "content"]
+    },
+    {
+      title: "In honor / in memory option surfaced",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Donation form",
+      hypothesis: "Surfacing tribute giving as a visible option (not buried) increases relevant donation starts.",
+      variantA: "Tribute giving option hidden under 'More options'.",
+      variantB: "Show a small 'Donate in honor or memory of someone' toggle directly on the main form.",
+      kpi: "Tribute donation starts",
+      guardrails: "Form completion time",
+      tags: ["donate", "personalization"]
+    },
+    {
+      title: "Campaign goal progress bar",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Above donation form",
+      hypothesis: "Visible progress toward a goal creates urgency and social proof.",
+      variantA: "No progress indicator.",
+      variantB: "Add a simple progress bar: 'X% of our goal reached' near the ask.",
+      kpi: "Donation starts",
+      guardrails: "Bounce",
+      tags: ["donate", "engagement"]
+    },
+    {
+      title: "ZIP-based local impact framing",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Donation module",
+      hypothesis: "Framing impact in terms of the visitor's own area increases relevance and giving.",
+      variantA: "Generic national impact framing.",
+      variantB: "Use ZIP/state context to show a local impact stat where available.",
+      kpi: "Donation starts",
+      guardrails: "None expected",
+      tags: ["donate", "personalization"]
+    },
+    {
+      title: "Mobile one-tap preset amounts",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Mobile donation module",
+      hypothesis: "Larger, one-tap preset amount buttons reduce friction on small screens.",
+      variantA: "Standard amount input field on mobile.",
+      variantB: "Large tappable preset amount buttons with a 'custom amount' fallback.",
+      kpi: "Mobile donation completion",
+      guardrails: "Average gift size",
+      tags: ["donate", "mobile"]
+    },
+    {
+      title: "High-contrast Donate button",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Donation module CTA",
+      hypothesis: "A higher-contrast Donate button improves visibility against surrounding content.",
+      variantA: "Current button color/contrast.",
+      variantB: "Higher-contrast button color for the Donate CTA only.",
+      kpi: "Donate button click-through",
+      guardrails: "None expected; visual-only change",
+      tags: ["donate", "color"]
     }
   ];
 
@@ -2480,6 +2690,114 @@ function buildSuggestionsFromScan(s, opts = {}) {
       kpi: "Successful logins",
       guardrails: "Password reset starts, errors",
       tags: ["login"]
+    },
+    {
+      title: "Clarify username vs member ID prompt",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Login form field label",
+      hypothesis: "Ambiguity between email/username/member ID causes failed first attempts.",
+      variantA: "Generic 'Username' label.",
+      variantB: "Label clarifies accepted formats, such as 'Email or Member ID'.",
+      kpi: "First-attempt login success",
+      guardrails: "Support clicks",
+      tags: ["login", "copy"]
+    },
+    {
+      title: "Inline field validation before submit",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Login form fields",
+      hypothesis: "Catching obvious errors (empty field, bad format) before submit reduces failed attempts.",
+      variantA: "Validation only shown after submit.",
+      variantB: "Inline validation as the visitor leaves each field.",
+      kpi: "Successful logins",
+      guardrails: "Time to complete form",
+      tags: ["login", "form"]
+    },
+    {
+      title: "Account benefits reminder near login",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Beside or above login form",
+      hypothesis: "Reminding visitors what they get by logging in reduces abandonment before they start.",
+      variantA: "Login form with no context.",
+      variantB: "Add 2-3 short bullets on what's available after login (billing, roadside, documents).",
+      kpi: "Login starts",
+      guardrails: "None expected",
+      tags: ["login", "trust"]
+    },
+    {
+      title: "Specific error messaging on failed login",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Login error state",
+      hypothesis: "Distinguishing 'wrong password' from 'no account found' reduces confusion and repeat failed attempts.",
+      variantA: "Generic 'Invalid login' message for all failure types.",
+      variantB: "Specific message per failure type, each with a clear next step.",
+      kpi: "Retry success rate, support contacts",
+      guardrails: "Account-enumeration risk — keep messaging general enough to avoid confirming which field was wrong",
+      tags: ["login", "copy"]
+    },
+    {
+      title: "Forgot password inline expand",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Below password field",
+      hypothesis: "Handling password recovery inline (instead of a full page navigation) keeps visitors in flow.",
+      variantA: "'Forgot password' links to a separate page.",
+      variantB: "'Forgot password' expands an inline reset-request field on the same page.",
+      kpi: "Password reset completion",
+      guardrails: "Reset request errors",
+      tags: ["login", "flow"]
+    },
+    {
+      title: "Remember me visibility",
+      activityType: "A/B",
+      audience: "Returning visitors",
+      placement: "Login form",
+      hypothesis: "A clearer 'Remember me' option reduces repeat-login friction for returning visitors.",
+      variantA: "Small, easy-to-miss 'Remember me' checkbox.",
+      variantB: "Slightly larger checkbox with a one-line benefit note ('Skip login next time on this device').",
+      kpi: "Remember-me opt-in rate",
+      guardrails: "Shared-device risk — keep copy neutral, do not encourage use on public devices",
+      tags: ["login", "copy"]
+    },
+    {
+      title: "Mobile single-column login layout",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Mobile login form",
+      hypothesis: "A simplified single-column layout reduces mis-taps and speeds up mobile login.",
+      variantA: "Current mobile layout.",
+      variantB: "Single-column form with larger tap targets and autofocus on the first field.",
+      kpi: "Mobile login success rate",
+      guardrails: "None expected",
+      tags: ["login", "mobile"]
+    },
+    {
+      title: "New vs returning visitor login framing",
+      activityType: "Experience Targeting (XT)",
+      audience: "New vs returning",
+      placement: "Login page hero",
+      hypothesis: "First-time visitors need registration framing; returning visitors just need a fast path in.",
+      variantA: "Same login page for everyone.",
+      variantB: "New: emphasize 'Create an account'. Returning: emphasize the login form, minimal distractions.",
+      kpi: "Login/registration completion",
+      guardrails: "Bounce",
+      tags: ["login"]
+    },
+    {
+      title: "High-contrast Sign In button",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Login form CTA",
+      hypothesis: "A higher-contrast Sign In button improves visibility of the primary action.",
+      variantA: "Current button color/contrast.",
+      variantB: "Higher-contrast button color for the Sign In CTA only.",
+      kpi: "Sign In click-through",
+      guardrails: "None expected; visual-only change",
+      tags: ["login", "color"]
     }
   ];
 
@@ -2507,6 +2825,114 @@ function buildSuggestionsFromScan(s, opts = {}) {
       kpi: "Join CTA click-through",
       guardrails: "Bounce, plan comparison clicks",
       tags: ["membership", "cta"]
+    },
+    {
+      title: "Highlight the most-popular tier",
+      activityType: "A/B",
+      audience: "Prospective members",
+      placement: "Membership comparison table",
+      hypothesis: "Flagging a 'Most Popular' tier reduces choice paralysis and speeds up the decision.",
+      variantA: "All tiers presented with equal visual weight.",
+      variantB: "Add a 'Most Popular' badge and slight visual emphasis on the recommended tier.",
+      kpi: "Join starts on the highlighted tier",
+      guardrails: "Overall join rate, plan mix",
+      tags: ["membership"]
+    },
+    {
+      title: "Response-time proof stat near roadside benefit",
+      activityType: "A/B",
+      audience: "Prospective members",
+      placement: "Roadside benefit section",
+      hypothesis: "A concrete stat (e.g. average response time) makes the roadside benefit feel more real and valuable.",
+      variantA: "Roadside benefit described qualitatively only.",
+      variantB: "Add a concrete stat or proof point next to the roadside benefit description.",
+      kpi: "Join starts",
+      guardrails: "None expected",
+      tags: ["membership", "trust"]
+    },
+    {
+      title: "Bundle savings estimate near Join CTA",
+      activityType: "A/B",
+      audience: "Prospective members",
+      placement: "Near primary Join CTA",
+      hypothesis: "Showing an estimated bundle savings (membership + insurance) increases perceived value at the decision point.",
+      variantA: "Join CTA with no savings context.",
+      variantB: "Add a short 'Members who bundle save an average of $X' note near the CTA.",
+      kpi: "Join CTA click-through",
+      guardrails: "Claim accuracy — confirm the figure with the business owner before shipping",
+      tags: ["membership", "cta"]
+    },
+    {
+      title: "Fewer required fields on the join form",
+      activityType: "A/B",
+      audience: "Prospective members",
+      placement: "Join form",
+      hypothesis: "Deferring optional fields to a later step reduces abandonment on the initial join form.",
+      variantA: "Full form (contact, payment, add-ons) shown at once.",
+      variantB: "Core fields first; add-ons and optional info deferred to a second step.",
+      kpi: "Join form completion rate",
+      guardrails: "Add-on attach rate",
+      tags: ["membership", "form"]
+    },
+    {
+      title: "Member count / tenure trust badge",
+      activityType: "A/B",
+      audience: "Prospective members",
+      placement: "Above the fold",
+      hypothesis: "Social proof (member count, years serving) increases trust before the visitor reaches pricing.",
+      variantA: "No social proof above the fold.",
+      variantB: "Add a short trust line, such as member count or years serving the region.",
+      kpi: "Scroll-to-pricing rate, join starts",
+      guardrails: "None expected",
+      tags: ["membership", "trust"]
+    },
+    {
+      title: "Mobile sticky Join CTA",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Mobile viewport only",
+      hypothesis: "Keeping the Join action available while scrolling reduces mobile abandonment.",
+      variantA: "No sticky CTA on mobile.",
+      variantB: "Sticky bottom bar with the Join CTA.",
+      kpi: "Mobile join starts",
+      guardrails: "Accidental taps",
+      tags: ["membership", "mobile"]
+    },
+    {
+      title: "Auto-Target: tier recommendation by quiz answers",
+      activityType: "Auto-Target",
+      audience: "Prospective members",
+      placement: "Membership quiz/selector module",
+      hypothesis: "A short quiz that recommends a tier reduces comparison fatigue and increases confident joins.",
+      variantA: "Static comparison table only.",
+      variantB: "Optional 2-3 question quiz that recommends a starting tier, tested via Auto-Target.",
+      kpi: "Join starts, plan mix",
+      guardrails: "Quiz completion rate",
+      tags: ["membership"]
+    },
+    {
+      title: "FAQ accordion near pricing",
+      activityType: "A/B",
+      audience: "Prospective members",
+      placement: "Below pricing table",
+      hypothesis: "Answering common objections right where hesitation happens reduces drop-off before the Join click.",
+      variantA: "FAQ located on a separate help page.",
+      variantB: "Add a short FAQ accordion (3-4 questions) directly below the pricing table.",
+      kpi: "Join starts",
+      guardrails: "Time on page",
+      tags: ["membership", "content"]
+    },
+    {
+      title: "High-contrast Join button",
+      activityType: "A/B",
+      audience: "Prospective members",
+      placement: "Primary Join CTA",
+      hypothesis: "A higher-contrast Join button improves visibility against surrounding pricing content.",
+      variantA: "Current button color/contrast.",
+      variantB: "Higher-contrast button color for the Join CTA only.",
+      kpi: "Join CTA click-through",
+      guardrails: "None expected; visual-only change",
+      tags: ["membership", "color"]
     }
   ];
 
@@ -2534,6 +2960,114 @@ function buildSuggestionsFromScan(s, opts = {}) {
       kpi: "Booking starts + advisor leads",
       guardrails: "Primary booking CTA clicks",
       tags: ["travel", "support"]
+    },
+    {
+      title: "Member discount badge on offers",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Travel offer cards",
+      hypothesis: "Making member savings visible on the card (not just at checkout) increases click-through.",
+      variantA: "Discount only visible after clicking into an offer.",
+      variantB: "Add a 'Member savings' badge directly on the offer card.",
+      kpi: "Offer click-through",
+      guardrails: "Claim accuracy per offer",
+      tags: ["travel"]
+    },
+    {
+      title: "Limited-time framing on featured trips",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Featured trips module",
+      hypothesis: "Genuine urgency framing (real dates only) increases engagement with featured offers.",
+      variantA: "Featured trips shown with no timing context.",
+      variantB: "Add real booking-window dates where applicable, e.g. 'Book by [date]'.",
+      kpi: "Featured trip click-through",
+      guardrails: "Must use accurate dates only — no manufactured urgency",
+      tags: ["travel"]
+    },
+    {
+      title: "Simplify default search filters",
+      activityType: "A/B",
+      audience: "Travel visitors",
+      placement: "Trip search module",
+      hypothesis: "Fewer default-visible filters reduces upfront decision load without removing capability.",
+      variantA: "All filters expanded by default.",
+      variantB: "Only destination/dates shown by default; other filters collapsed under 'More filters'.",
+      kpi: "Search completion rate",
+      guardrails: "Filter usage rate",
+      tags: ["travel", "form"]
+    },
+    {
+      title: "'Backed by AAA' reassurance near booking",
+      activityType: "A/B",
+      audience: "Travel visitors",
+      placement: "Near booking CTA",
+      hypothesis: "Reinforcing the AAA relationship right before booking reduces last-step hesitation.",
+      variantA: "Booking CTA with no trust reinforcement.",
+      variantB: "Add a small 'Backed by AAA' or member-support note near the CTA.",
+      kpi: "Booking starts",
+      guardrails: "None expected",
+      tags: ["travel", "trust"]
+    },
+    {
+      title: "Mobile sticky 'Find a trip' CTA",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Mobile viewport only",
+      hypothesis: "Keeping the primary search/booking action available reduces mobile scroll fatigue.",
+      variantA: "No sticky CTA on mobile.",
+      variantB: "Sticky bottom bar with a 'Find a trip' or 'Book now' button.",
+      kpi: "Mobile booking starts",
+      guardrails: "Accidental taps",
+      tags: ["travel", "mobile"]
+    },
+    {
+      title: "Recently viewed destinations module",
+      activityType: "A/B",
+      audience: "Returning visitors",
+      placement: "Below hero",
+      hypothesis: "Resurfacing recently viewed destinations reduces re-search effort for visitors comparing options.",
+      variantA: "No recently viewed module.",
+      variantB: "Add a small 'Continue where you left off' module for the last 2-3 viewed destinations.",
+      kpi: "Return-visit booking rate",
+      guardrails: "None expected; requires session/local data only",
+      tags: ["travel", "personalization"]
+    },
+    {
+      title: "Travel insurance framing at booking step",
+      activityType: "A/B",
+      audience: "Travel visitors",
+      placement: "Checkout / booking step",
+      hypothesis: "Framing travel insurance around specific protections (not just 'add insurance?') increases attach rate.",
+      variantA: "Generic 'Add travel insurance?' checkbox.",
+      variantB: "Checkbox with 2-3 concrete protections listed (trip cancellation, medical, baggage).",
+      kpi: "Insurance attach rate",
+      guardrails: "Total booking completion rate",
+      tags: ["travel", "copy"]
+    },
+    {
+      title: "Auto-Target: seasonal hero imagery",
+      activityType: "Auto-Target",
+      audience: "All visitors",
+      placement: "Hero module",
+      hypothesis: "Letting Auto-Target pick the best-performing seasonal/destination imagery improves engagement over a single static hero.",
+      variantA: "Single static hero image.",
+      variantB: "3-4 seasonal/destination hero images tested via Auto-Target.",
+      kpi: "Hero click-through",
+      guardrails: "LCP/CLS from image swaps",
+      tags: ["travel"]
+    },
+    {
+      title: "High-contrast 'Book Now' button",
+      activityType: "A/B",
+      audience: "Travel visitors",
+      placement: "Booking CTA",
+      hypothesis: "A higher-contrast Book Now button improves visibility against trip imagery.",
+      variantA: "Current button color/contrast.",
+      variantB: "Higher-contrast button color for the Book Now CTA only.",
+      kpi: "Book Now click-through",
+      guardrails: "None expected; visual-only change",
+      tags: ["travel", "color"]
     }
   ];
 
@@ -2561,6 +3095,114 @@ function buildSuggestionsFromScan(s, opts = {}) {
       kpi: "Category clicks / offer opens",
       guardrails: "Filter usage, bounce",
       tags: ["discounts", "nav"]
+    },
+    {
+      title: "Category icon grid instead of text list",
+      activityType: "A/B",
+      audience: "Discounts visitors",
+      placement: "Category navigation",
+      hypothesis: "A visual icon grid is scanned faster than a plain text list of categories.",
+      variantA: "Plain text list of categories.",
+      variantB: "Icon + label grid for the same categories.",
+      kpi: "Category click-through",
+      guardrails: "Mobile layout complexity",
+      tags: ["discounts"]
+    },
+    {
+      title: "Surface most-redeemed deals",
+      activityType: "A/B",
+      audience: "Discounts visitors",
+      placement: "Top of discounts listing",
+      hypothesis: "Leading with popular, proven deals increases trust and click-through versus a purely chronological list.",
+      variantA: "Deals listed chronologically/alphabetically only.",
+      variantB: "Add a 'Popular with members' row at the top using redemption data.",
+      kpi: "Deal clicks",
+      guardrails: "Long-tail deal visibility",
+      tags: ["discounts"]
+    },
+    {
+      title: "In-page search for discounts",
+      activityType: "A/B",
+      audience: "Discounts visitors",
+      placement: "Top of discounts page",
+      hypothesis: "A search box lets visitors with a specific merchant in mind skip browsing entirely.",
+      variantA: "No search, browse/filter only.",
+      variantB: "Add a search box searching offer/merchant names.",
+      kpi: "Search usage, offer opens",
+      guardrails: "Zero-result rate",
+      tags: ["discounts", "nav"]
+    },
+    {
+      title: "Mobile single-column deal cards",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Mobile discounts listing",
+      hypothesis: "Larger single-column cards are easier to scan and tap accurately on mobile.",
+      variantA: "Dense multi-column grid on mobile.",
+      variantB: "Single-column cards with larger tap targets.",
+      kpi: "Mobile offer opens",
+      guardrails: "Scroll depth needed to see all deals",
+      tags: ["discounts", "mobile"]
+    },
+    {
+      title: "New / ending soon badges",
+      activityType: "A/B",
+      audience: "Discounts visitors",
+      placement: "Deal cards",
+      hypothesis: "Freshness signals give visitors a reason to check back and act sooner on time-limited deals.",
+      variantA: "No freshness indicator on cards.",
+      variantB: "Add 'New' or 'Ending soon' badges where the underlying data supports it.",
+      kpi: "Deal clicks",
+      guardrails: "Badge accuracy — only show when backed by real dates",
+      tags: ["discounts"]
+    },
+    {
+      title: "Auto-Target: personalize category order",
+      activityType: "Auto-Target",
+      audience: "Returning visitors",
+      placement: "Category navigation",
+      hypothesis: "Ordering categories by a visitor's past engagement increases relevant clicks over a fixed order.",
+      variantA: "Fixed category order for everyone.",
+      variantB: "Category order personalized by past click behavior, tested via Auto-Target.",
+      kpi: "Category click-through",
+      guardrails: "Findability of untried categories",
+      tags: ["discounts", "personalization"]
+    },
+    {
+      title: "Verified partner badge on offers",
+      activityType: "A/B",
+      audience: "Discounts visitors",
+      placement: "Offer detail",
+      hypothesis: "A verification cue reduces hesitation to click through to an external merchant.",
+      variantA: "No partner verification cue.",
+      variantB: "Add a small 'Verified AAA partner' badge on offer cards.",
+      kpi: "Offer click-through",
+      guardrails: "None expected",
+      tags: ["discounts", "trust"]
+    },
+    {
+      title: "Simplify redemption instructions",
+      activityType: "A/B",
+      audience: "Discounts visitors",
+      placement: "Offer detail / redemption step",
+      hypothesis: "Shorter, clearer redemption steps reduce support questions and abandoned redemptions.",
+      variantA: "Long paragraph-style redemption instructions.",
+      variantB: "Numbered 3-step redemption instructions.",
+      kpi: "Redemption completion, support contacts",
+      guardrails: "None expected",
+      tags: ["discounts", "copy"]
+    },
+    {
+      title: "High-contrast 'View Deal' button",
+      activityType: "A/B",
+      audience: "Discounts visitors",
+      placement: "Deal cards",
+      hypothesis: "A higher-contrast action button improves visibility against varied merchant imagery.",
+      variantA: "Current button color/contrast.",
+      variantB: "Higher-contrast button color for the View Deal action only.",
+      kpi: "Deal clicks",
+      guardrails: "None expected; visual-only change",
+      tags: ["discounts", "color"]
     }
   ];
 
@@ -2588,6 +3230,114 @@ function buildSuggestionsFromScan(s, opts = {}) {
       kpi: "Scroll depth / time on page",
       guardrails: "CTA clicks, bounce",
       tags: ["content", "copy"]
+    },
+    {
+      title: "Table of contents for long articles",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "Below intro, long-form articles",
+      hypothesis: "A jump-to table of contents helps readers find the relevant section faster and reduces early exits.",
+      variantA: "No table of contents.",
+      variantB: "Add a short jump-to table of contents for articles over ~800 words.",
+      kpi: "Scroll depth, time on page",
+      guardrails: "None expected",
+      tags: ["content", "nav"]
+    },
+    {
+      title: "Author/credibility byline module",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "Below H1",
+      hypothesis: "A credible byline (author/reviewer, date) increases trust in the content's accuracy.",
+      variantA: "No byline or credibility signal.",
+      variantB: "Add a short byline with author/reviewer and last-updated date.",
+      kpi: "Scroll depth, related CTA click-through",
+      guardrails: "None expected",
+      tags: ["content", "trust"]
+    },
+    {
+      title: "Auto-Target: personalized related articles",
+      activityType: "Auto-Target",
+      audience: "All visitors",
+      placement: "End of article",
+      hypothesis: "Related articles chosen by topic/behavior affinity outperform a fixed 'related' list.",
+      variantA: "Fixed related-articles list (same category only).",
+      variantB: "Personalized related-articles selection tested via Auto-Target.",
+      kpi: "Related article click-through",
+      guardrails: "None expected",
+      tags: ["content", "personalization"]
+    },
+    {
+      title: "Mid-article newsletter signup nudge",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "Mid-article, after 2-3 paragraphs",
+      hypothesis: "A lightweight nudge mid-article reaches engaged readers before they finish and leave.",
+      variantA: "Newsletter signup only in the footer.",
+      variantB: "Add a small inline nudge partway through the article.",
+      kpi: "Newsletter signups",
+      guardrails: "Reading flow disruption, bounce",
+      tags: ["content", "engagement"]
+    },
+    {
+      title: "Estimated read time near title",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "Below H1",
+      hypothesis: "Setting a time expectation up front increases completion for readers who commit.",
+      variantA: "No read-time indicator.",
+      variantB: "Add a short '~4 min read' label near the title.",
+      kpi: "Scroll depth, completion rate",
+      guardrails: "None expected",
+      tags: ["content", "copy"]
+    },
+    {
+      title: "Increase social share visibility",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "Article top or sticky side rail",
+      hypothesis: "More visible share actions increase organic reach from engaged readers.",
+      variantA: "Share icons only at the bottom of the article.",
+      variantB: "Add a sticky share rail visible while reading.",
+      kpi: "Share clicks",
+      guardrails: "Layout crowding on mobile",
+      tags: ["content", "engagement"]
+    },
+    {
+      title: "Shorten the opening paragraph",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "Article intro",
+      hypothesis: "A tighter, more direct opening reduces early bounce before readers reach the value of the article.",
+      variantA: "Current multi-sentence intro paragraph.",
+      variantB: "Shorter, more direct opening (1-2 sentences) stating what the reader will get.",
+      kpi: "Scroll-past-intro rate",
+      guardrails: "None expected",
+      tags: ["content", "copy"]
+    },
+    {
+      title: "Sticky 'back to top' on long articles",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "Bottom-right, long-form articles",
+      hypothesis: "Making it easy to return to the top (e.g. to the related-action module) reduces friction after finishing.",
+      variantA: "No back-to-top affordance.",
+      variantB: "Small sticky back-to-top button appears after sufficient scroll.",
+      kpi: "Post-article engagement",
+      guardrails: "None expected",
+      tags: ["content"]
+    },
+    {
+      title: "High-contrast in-article CTA",
+      activityType: "A/B",
+      audience: "Content readers",
+      placement: "Mid or end of article",
+      hypothesis: "A higher-contrast in-article action stands out against body copy better than a plain text link.",
+      variantA: "Plain text link as the in-article call to action.",
+      variantB: "Higher-contrast button styling for the same call to action.",
+      kpi: "In-article CTA click-through",
+      guardrails: "None expected; visual-only change",
+      tags: ["content", "color"]
     }
   ];
 
@@ -2603,6 +3353,114 @@ function buildSuggestionsFromScan(s, opts = {}) {
       kpi: "Task click-through",
       guardrails: "Bounce",
       tags: ["nav"]
+    },
+    {
+      title: "Increase search bar prominence",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Header",
+      hypothesis: "A more visible search bar reduces reliance on menu navigation for findability.",
+      variantA: "Small search icon that expands on click.",
+      variantB: "Always-visible search input in the header.",
+      kpi: "Search usage, zero-result rate",
+      guardrails: "Header layout complaints, mobile space",
+      tags: ["nav"]
+    },
+    {
+      title: "Sticky quick-links bar",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Below main header, sticky on scroll",
+      hypothesis: "Keeping common destinations (Quote, Pay, Roadside) available while scrolling reduces back-to-top trips.",
+      variantA: "Quick links only in the main nav.",
+      variantB: "Sticky secondary bar with Quote/Pay/Roadside links visible while scrolling.",
+      kpi: "Quick-link click-through",
+      guardrails: "Content overlap on small screens",
+      tags: ["nav", "sticky"]
+    },
+    {
+      title: "ZIP-first locator entry point",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Locations / agent finder module",
+      hypothesis: "Leading with a ZIP input instead of a map reduces steps to find a nearby office or agent.",
+      variantA: "Map-first locator.",
+      variantB: "ZIP input first, with the map appearing after results.",
+      kpi: "Locator completion rate",
+      guardrails: "Map usage rate",
+      tags: ["nav"]
+    },
+    {
+      title: "Simplify mega menu columns",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Main navigation menu",
+      hypothesis: "Fewer, better-labeled columns reduce hesitation when scanning the mega menu.",
+      variantA: "Current mega menu with many columns/links.",
+      variantB: "Consolidated menu with fewer, task-oriented columns (Get a Quote, Manage Policy, Get Help).",
+      kpi: "Menu click-through, exit rate",
+      guardrails: "Findability of less-common links",
+      tags: ["nav"]
+    },
+    {
+      title: "Consolidated contact options module",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Header or footer",
+      hypothesis: "Grouping phone/chat/locations in one place reduces the hunt for a way to reach a human.",
+      variantA: "Contact options scattered across pages.",
+      variantB: "Single 'Contact us' module listing phone, chat, and locations together.",
+      kpi: "Contact module click-through",
+      guardrails: "Support volume by channel",
+      tags: ["nav", "support"]
+    },
+    {
+      title: "New vs returning visitor nav emphasis",
+      activityType: "Experience Targeting (XT)",
+      audience: "New vs returning",
+      placement: "Main navigation",
+      hypothesis: "New visitors need orientation; returning visitors want fast access to account/service tasks.",
+      variantA: "Identical nav for everyone.",
+      variantB: "New: emphasize 'Get a Quote' and 'About'. Returning: emphasize 'Sign In' and 'Manage Policy'.",
+      kpi: "Task completion by segment",
+      guardrails: "Bounce",
+      tags: ["nav"]
+    },
+    {
+      title: "Clarify mobile menu label",
+      activityType: "A/B",
+      audience: "Mobile visitors",
+      placement: "Mobile header",
+      hypothesis: "An icon-plus-label menu trigger is found faster than an icon alone.",
+      variantA: "Hamburger icon only.",
+      variantB: "Hamburger icon with a 'Menu' label next to it.",
+      kpi: "Menu open rate",
+      guardrails: "Header space on small screens",
+      tags: ["nav", "mobile"]
+    },
+    {
+      title: "Auto-Target: reorder tasks by usage",
+      activityType: "Auto-Target",
+      audience: "All visitors",
+      placement: "Top tasks module",
+      hypothesis: "Letting Auto-Target learn the best task order improves click-through over a fixed order.",
+      variantA: "Fixed task order (Quote, Pay, Roadside, Locations).",
+      variantB: "3-4 task-order variants tested via Auto-Target.",
+      kpi: "Task click-through",
+      guardrails: "Findability of lower-traffic tasks",
+      tags: ["nav"]
+    },
+    {
+      title: "Search zero-result recovery suggestions",
+      activityType: "A/B",
+      audience: "All visitors",
+      placement: "Search results page",
+      hypothesis: "Suggesting alternatives on a zero-result search keeps visitors from dead-ending and leaving.",
+      variantA: "Plain 'No results found' message.",
+      variantB: "'No results found' plus 2-3 suggested common searches/links.",
+      kpi: "Post-zero-result engagement",
+      guardrails: "None expected",
+      tags: ["nav", "copy"]
     }
   ];
 
@@ -2753,15 +3611,24 @@ document.getElementById('applyBtn')?.addEventListener('click', async () => {
     if (result.fail === 0) {
       toast(msgEl, `Switching to ${result.stateCode} using ZIP ${result.zip} ✔`, true);
       setCurrentStatePill(result.stateCode);
+
+      // Navigate the same active tab immediately after the cookie/storage work
+      // finishes. Do not wait on a visible countdown; that pause invited double-clicks.
+      await chrome.tabs.update(tab.id, { url: result.nextUrl });
+      window.close();
     } else {
+      // Some cookie writes failed. Leaving the popup open (instead of navigating
+      // and closing like the success path) is the whole point here — closing
+      // immediately hid this error entirely; the tester just saw the page
+      // reload and assumed the switch worked.
       const summary = result.errors.slice(0, 6).join(" • ");
       toast(msgEl, `State switch partly applied. Set ${result.ok}; ${result.fail} failed. ${summary}${result.errors.length > 6 ? " • …" : ""}`, false);
+      stateSwitchInFlight = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
     }
-
-    // Navigate the same active tab immediately after the cookie/storage work
-    // finishes. Do not wait on a visible countdown; that pause invited double-clicks.
-    await chrome.tabs.update(tab.id, { url: result.nextUrl });
-    window.close();
   } catch (err) {
     console.error('State apply error:', err);
     toast(msgEl, err?.message || "Error applying state cookies", false);
@@ -2783,6 +3650,23 @@ function setActiveEnvLink(env){document.querySelectorAll('#envRow a[data-env]').
 document.getElementById('envRow')?.addEventListener('click',(e)=>{const a=e.target.closest('a[data-env]');if(!a)return;e.preventDefault();currentEnv=a.getAttribute('data-env');setActiveEnvLink(currentEnv);enableWebsitesAndAemLinks();try{chrome.storage.sync.set({[ENV_KEY]:currentEnv});}catch{}},true);
 document.querySelectorAll('[data-company]').forEach(link=>{link.addEventListener('click',(e)=>{e.preventDefault();if(!currentEnv||link.classList.contains('disabled'))return;const company=link.getAttribute('data-company');const target=urls?.[company]?.[currentEnv];if(target)chrome.tabs.create({url:target});});});
 document.getElementById('authorLink')?.addEventListener('click',(e)=>{e.preventDefault();if(!currentEnv||e.currentTarget.classList.contains('disabled'))return;const target=authorUrls[currentEnv];if(target)chrome.tabs.create({url:target});});
+document.getElementById('openSiteInspector')?.addEventListener('click', async () => {
+  // Prefill Site Inspector's Start URL with the domain of the tab it was
+  // opened from, so a tester on meemic.com doesn't land on a scanner still
+  // pointed at acg.aaa.com by default.
+  let startUrl = "";
+  try {
+    const tab = await getActiveTab();
+    if (tab?.url && isAllowedHost(tab.url)) {
+      startUrl = new URL(tab.url).origin + "/";
+    }
+  } catch { /* fall back to Site Inspector's own default */ }
+
+  const target = startUrl
+    ? `${chrome.runtime.getURL('site-inspector.html')}?start=${encodeURIComponent(startUrl)}`
+    : chrome.runtime.getURL('site-inspector.html');
+  chrome.tabs.create({ url: target });
+});
 
 /* ---------- Theme ---------- */
 function applyTheme(mode){document.documentElement.setAttribute("data-theme",mode);document.getElementById('themeLight')?.setAttribute('aria-pressed',String(mode==='light'));document.getElementById('themeDark')?.setAttribute('aria-pressed',String(mode==='dark'));document.getElementById('themeSystem')?.setAttribute('aria-pressed',String(mode==='system'));}
