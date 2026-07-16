@@ -348,47 +348,43 @@ async function removeCookieAtCandidateUrls(name) {
 }
 
 async function removeCookiesByNameFast(names) {
-  // Fast path for the button click. The slower broad duplicate cleanup now runs
-  // in the background/state keeper after navigation, so Chrome does not sit
-  // on the popup for 10+ seconds before the page starts changing.
-  const results = await Promise.allSettled(names.map(name => removeCookieAtCandidateUrls(name)));
+  // Read what's actually set once, then only remove real matches — instead of
+  // blindly attempting removal at every name/URL/pass combination (63 attempts
+  // for 7 cookie names) regardless of whether anything exists there. That blind
+  // approach still stalled for seconds even after being parallelized on the JS
+  // side: Chrome's cookie store appears to queue/serialize that many concurrent
+  // write attempts internally, so firing fewer of them (usually well under 10
+  // instead of 63) matters more than how they're scheduled from our side.
+  const nameSet = new Set(names);
+  let matches;
+
+  try {
+    const allCookies = await chrome.cookies.getAll({ domain: "aaa.com" });
+    matches = allCookies.filter(c => nameSet.has(c.name));
+  } catch {
+    // Broad getAll itself failed (e.g. a host permission issue) — fall back to
+    // the blind brute-force path so the switcher stays usable either way.
+    const results = await Promise.allSettled(names.map(name => removeCookieAtCandidateUrls(name)));
+    return {
+      removed: results.reduce((sum, r) => sum + (r.status === "fulfilled" ? Number(r.value || 0) : 0), 0),
+      errors: results
+        .filter(r => r.status === "rejected")
+        .map(r => String(r.reason?.message || r.reason || "cookie removal failed"))
+    };
+  }
+
+  const results = await Promise.allSettled(matches.map(cookie => {
+    const url = cookieRemovalUrl(cookie);
+    if (!isAllowedHost(url)) return Promise.resolve(null);
+    return chrome.cookies.remove({ url, name: cookie.name, storeId: cookie.storeId });
+  }));
+
   return {
-    removed: results.reduce((sum, r) => sum + (r.status === "fulfilled" ? Number(r.value || 0) : 0), 0),
+    removed: results.filter(r => r.status === "fulfilled" && r.value).length,
     errors: results
       .filter(r => r.status === "rejected")
       .map(r => String(r.reason?.message || r.reason || "cookie removal failed"))
   };
-}
-
-async function removeCookiesByName(names) {
-  let removed = 0;
-  const errors = [];
-
-  for (const name of names) {
-    let matches = [];
-    try {
-      matches = await chrome.cookies.getAll({ name });
-    } catch (e) {
-      // Fallback keeps the switcher usable even if broad getAll is blocked by host permissions.
-      removed += await removeCookieAtCandidateUrls(name);
-      continue;
-    }
-
-    for (const cookie of matches) {
-      try {
-        const url = cookieRemovalUrl(cookie);
-        if (!isAllowedHost(url)) continue;
-        await chrome.cookies.remove({ url, name, storeId: cookie.storeId });
-        removed++;
-      } catch (e) {
-        errors.push(`${name}: remove failed (${e?.message || e})`);
-      }
-    }
-
-    removed += await removeCookieAtCandidateUrls(name);
-  }
-
-  return { removed, errors };
 }
 
 async function applyCoreStateCookies(profile, tabUrl, tabId) {
