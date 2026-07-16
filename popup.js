@@ -5,6 +5,15 @@
 const extVersionEl = document.getElementById('extVersion');
 if (extVersionEl) extVersionEl.textContent = `v${chrome.runtime.getManifest().version}`;
 
+// Fire-and-forget cache warm-up: chrome.cookies.* calls hit an on-disk cookie
+// store, and the first access after the extension loads (or after it's been
+// idle) can be noticeably slower than later ones — this is what made the
+// first "Switch State" click of a session slow even after the cookie-removal
+// calls were parallelized. Touch the store as soon as the popup opens, while
+// the user is still picking a state, so that one-time cost lands here
+// instead of after they click.
+try { chrome.cookies.getAll({ domain: "aaa.com" }).catch(() => {}); } catch {}
+
 // Popup UI storage keys
 const POPUP_TAB_KEY = "popupActiveTab";
 const STRATEGIST_CUSTOM_KEY = "strategistCustomIdeas";
