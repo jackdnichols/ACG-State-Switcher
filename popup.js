@@ -319,20 +319,23 @@ function urlWithZipGateParams(urlString, zip, stateCode) {
 // kept in sync by hand.
 
 async function removeCookieAtCandidateUrls(name) {
-  let removed = 0;
   const urls = [ACG_COOKIE_URL, "https://acg.aaa.com/", "https://www.acg.aaa.com/"];
 
   // Repeated passes handle cases where both host-only and .aaa.com cookies share a name.
+  // The 9 attempts (3 passes x 3 urls) are independent of each other and order
+  // doesn't matter, so run them concurrently instead of one at a time — on a
+  // machine where each chrome.cookies.remove() round-trip costs real time,
+  // doing this sequentially turned a ~9x cost multiplier into an 8-17 second
+  // stall before the switch even started.
+  const attempts = [];
   for (let pass = 0; pass < 3; pass++) {
     for (const url of urls) {
-      try {
-        const result = await chrome.cookies.remove({ url, name });
-        if (result) removed++;
-      } catch { /* ignore candidate failures */ }
+      attempts.push(chrome.cookies.remove({ url, name }).catch(() => null));
     }
   }
 
-  return removed;
+  const results = await Promise.all(attempts);
+  return results.filter(Boolean).length;
 }
 
 async function removeCookiesByNameFast(names) {
