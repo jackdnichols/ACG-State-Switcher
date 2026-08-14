@@ -2966,6 +2966,23 @@
       test: function (msg) { return /pinterest/i.test(msg); },
       title: "Pinterest tag fired more than once",
       recommendation: "The Pinterest conversion tag's load command ran twice with different tag IDs. Usually means the Pinterest snippet is being injected from more than one place (a hardcoded snippet plus a Tealium/GTM tag, or a client-side route change re-firing it without checking if it's already loaded). Check for duplicate Pinterest tag placements in Tealium iQ or the page template and dedupe them."
+    },
+    {
+      test: function (msg) { return /^script error\.?$/i.test(msg.trim()); },
+      title: "Cross-origin script threw with details hidden (\"Script error.\")",
+      recommendation: "Browsers replace the real message/stack with the generic \"Script error.\" when an uncaught exception comes from a script loaded from a different origin without CORS enabled for it (no Access-Control-Allow-Origin header, or the <script> tag is missing a matching crossorigin attribute) — this is deliberate, so cross-origin scripts can't leak details to the page. To see the real error: if you control the script, add crossorigin=\"anonymous\" to its <script> tag and make sure the server sends Access-Control-Allow-Origin for it. If it's a third-party/vendor tag you don't control, check the Network tab for scripts loaded around the same timestamp to identify which one it is — the console alone won't say more without CORS fixed on their end."
+    },
+    {
+      test: function (msg) { return /^at:\s*metric element not found/i.test(msg.trim()); },
+      title: "Adobe Target metric selector not found on this page",
+      recommendation: function (msg) {
+        var selectorMatch = msg.match(/"selector"\s*:\s*"([^"]+)"/);
+        var typeMatch = msg.match(/"type"\s*:\s*"([^"]+)"/);
+        var selector = selectorMatch ? selectorMatch[1] : "the configured selector";
+        var eventType = typeMatch ? typeMatch[1] : "an";
+        return "An Adobe Target activity has a " + eventType + " metric configured to track " + selector +
+          ", but that element doesn't exist on this page. Usually means the activity's page/audience targeting is broader than the pages that actually have that element (e.g. a metric meant for a different page or flow is still being evaluated here). Check that activity's metric configuration in Adobe Target (or the Tealium extension driving it) and either scope it to the right pages or fix the selector.";
+      }
     }
   ];
 
@@ -2975,8 +2992,16 @@
   };
 
   function matchConsoleRules(message) {
-    var matches = CONSOLE_ERROR_RULES.filter(function (rule) { return rule.test(message); });
-    return matches.length ? matches : [CONSOLE_FALLBACK_RULE];
+    var matched = CONSOLE_ERROR_RULES.filter(function (rule) { return rule.test(message); });
+
+    var resolved = matched.map(function (rule) {
+      return {
+        title: rule.title,
+        recommendation: typeof rule.recommendation === "function" ? rule.recommendation(message) : rule.recommendation
+      };
+    });
+
+    return resolved.length ? resolved : [CONSOLE_FALLBACK_RULE];
   }
 
   var consoleState = createScanState("console");
