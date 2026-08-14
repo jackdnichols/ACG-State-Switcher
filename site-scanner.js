@@ -239,6 +239,7 @@
     if (linkState.running) runningCount++;
     if (mixedState.running) runningCount++;
     if (auditState.running) runningCount++;
+    if (consoleState.running) runningCount++;
 
     setText("globalStatus", runningCount ? runningCount + " scan(s) running" : "Ready");
     setText("globalCacheCount", htmlPageCacheCount);
@@ -3502,10 +3503,10 @@
   byId("mixedScanBtn").onclick = function () { runMixedContentScan(); };
   byId("auditScanBtn").onclick = function () { runPageAuditScan(); };
 
-  byId("runBothBtn").onclick = function () {
+  byId("runBothBtn").onclick = async function () {
     var started = [];
     var alreadyRunning = lowerState.running && imageState.running && spellState.running &&
-      linkState.running && mixedState.running && auditState.running;
+      linkState.running && mixedState.running && auditState.running && consoleState.running;
     var nothingElseToStart = alreadyRunning;
 
     if (!lowerState.running) { runLowerEnvironmentScan(); started.push("lower env links"); }
@@ -3526,6 +3527,21 @@
     } else if (!wordState.running) {
       byId("wordStatus").textContent = "Skipped by Run All: no search terms entered.";
       nothingElseToStart = false;
+    }
+
+    // Console Scan needs an actual target tab picked (unlike the fetch-based
+    // scanners above), and calling it with none selected would hit its own
+    // blocking alert() the same way Word Search's does. Refresh the tab list
+    // first so this reflects whatever tabs are actually open right now.
+    if (!consoleState.running) {
+      await refreshConsoleTabList();
+      if (byId("consoleTabSelect").value) {
+        runConsoleScan();
+        started.push("console errors");
+      } else {
+        byId("consoleStatus").textContent = "Skipped by Run All: no target tab available to drive.";
+        nothingElseToStart = false;
+      }
     }
 
     if (!started.length && nothingElseToStart) alert("All scans are already running.");
@@ -3625,6 +3641,11 @@
       byId("auditStatus").textContent = "Stopping page audit...";
       stoppedAny = true;
     }
+    if (consoleState.running) {
+      consoleState.stop = true; consoleState.status = "Stopping";
+      byId("consoleStatus").textContent = "Stopping...";
+      stoppedAny = true;
+    }
 
     if (!stoppedAny) alert("No scans are currently running.");
 
@@ -3635,6 +3656,7 @@
     updateLinkSummary();
     updateMixedSummary();
     updateAuditSummary();
+    updateConsoleSummary();
     updateGlobalSummary();
   };
 
