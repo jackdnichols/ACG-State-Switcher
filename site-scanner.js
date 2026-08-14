@@ -57,6 +57,7 @@
   var SPELL_YIELD_EVERY_WORDS = 200;
   var SPELL_DEFAULT_MAX_FINDINGS = 300;
   var WORD_DEFAULT_MAX_FINDINGS = 500;
+  var CONSOLE_DEFAULT_MAX_FINDINGS = 300;
   var TRACKING_PARAMS = {
     cid: true, cmpid: true, gclid: true, fbclid: true, msclkid: true,
     campaign: true, source: true, medium: true, term: true, content: true
@@ -2961,9 +2962,23 @@
   var consoleState = {
     running: false, tabId: null, tabLabel: "",
     startedAt: null, endedAt: null,
-    errorCount: 0, warningCount: 0, rejectionCount: 0
+    errorCount: 0, warningCount: 0, rejectionCount: 0,
+    findingLimitHit: false
   };
   var consoleFindings = [];
+  var lastConsoleFindingKey = null;
+  var lastConsoleRowEl = null;
+
+  function getConsoleMaxFindings() {
+    var input = byId("consoleMaxFindings");
+    var value = parseInt(input.value, 10);
+
+    if (isNaN(value) || value < 25) value = CONSOLE_DEFAULT_MAX_FINDINGS;
+    if (value > 5000) value = 5000;
+
+    input.value = String(value);
+    return value;
+  }
 
   function updateConsoleSummary() {
     setText("consoleSumStatus", consoleState.running ? "Capturing" : (consoleState.startedAt ? "Stopped" : "Ready"));
@@ -3008,22 +3023,64 @@
     }
   }
 
-  function addConsoleFinding(payload) {
-    var matches = matchConsoleRules(payload.message || "");
+  function bumpConsoleTypeCounter(type) {
+    if (type === "uncaught-exception") consoleState.errorCount++;
+    else if (type === "unhandled-rejection") consoleState.rejectionCount++;
+    else if (type === "console.warn") consoleState.warningCount++;
+    else consoleState.errorCount++;
+  }
 
-    consoleFindings.push({
-      time: payload.time || Date.now(),
-      type: payload.type,
-      message: payload.message || "",
+  function addConsoleFinding(payload) {
+    if (consoleState.findingLimitHit) return;
+
+    var type = payload.type;
+    var message = payload.message || "";
+    var time = payload.time || Date.now();
+    var key = type + "|" + message;
+
+    // Collapse an event that's identical (same type+message) to the one
+    // immediately before it into a repeat count instead of adding a new
+    // row each time — a single noisy/looping error on the page otherwise
+    // floods the results list and can make the tab unresponsive.
+    if (key === lastConsoleFindingKey && consoleFindings.length) {
+      var last = consoleFindings[consoleFindings.length - 1];
+      last.count = (last.count || 1) + 1;
+      last.time = time;
+
+      bumpConsoleTypeCounter(type);
+      updateConsoleSummary();
+
+      if (lastConsoleRowEl) {
+        var metaEl = lastConsoleRowEl.querySelector(".meta");
+        if (metaEl) {
+          metaEl.textContent = consoleEventTypeLabel(type) + " — " + new Date(time).toLocaleTimeString() +
+            " (x" + last.count + ")";
+        }
+      }
+
+      return;
+    }
+
+    var matches = matchConsoleRules(message);
+
+    var finding = {
+      time: time,
+      type: type,
+      message: message,
       stack: payload.stack || "",
       pageUrl: payload.url || "",
+      count: 1,
       recommendations: matches
-    });
+    };
+    consoleFindings.push(finding);
+    lastConsoleFindingKey = key;
 
-    if (payload.type === "uncaught-exception") consoleState.errorCount++;
-    else if (payload.type === "unhandled-rejection") consoleState.rejectionCount++;
-    else if (payload.type === "console.warn") consoleState.warningCount++;
-    else consoleState.errorCount++;
+    bumpConsoleTypeCounter(type);
+
+    var maxFindings = getConsoleMaxFindings();
+    if (maxFindings > 0 && consoleFindings.length >= maxFindings) {
+      consoleState.findingLimitHit = true;
+    }
 
     updateConsoleSummary();
 
@@ -3035,11 +3092,11 @@
 
     var msgEl = document.createElement("div");
     msgEl.className = "bad";
-    msgEl.textContent = payload.message || "(empty message)";
+    msgEl.textContent = message || "(empty message)";
 
     var metaEl = document.createElement("div");
     metaEl.className = "meta";
-    metaEl.textContent = consoleEventTypeLabel(payload.type) + " — " + new Date(payload.time || Date.now()).toLocaleTimeString();
+    metaEl.textContent = consoleEventTypeLabel(type) + " — " + new Date(time).toLocaleTimeString();
 
     var pageEl = document.createElement("div");
     pageEl.className = "page";
@@ -3060,9 +3117,15 @@
     });
 
     resultsEl.insertBefore(row, resultsEl.firstChild);
+    lastConsoleRowEl = row;
 
     var logEl = byId("consoleLog");
-    logTo(logEl, "[" + consoleEventTypeLabel(payload.type) + "] " + (payload.message || ""));
+    logTo(logEl, "[" + consoleEventTypeLabel(type) + "] " + message);
+
+    if (consoleState.findingLimitHit) {
+      logTo(logEl, "Stopped at max captured events: " + maxFindings + ". Increase the limit, or Clear results and start again if you need more.");
+      stopConsoleCapture();
+    }
   }
 
   function handleConsoleCaptureMessage(message, sender) {
@@ -3109,6 +3172,9 @@
     consoleState.errorCount = 0;
     consoleState.warningCount = 0;
     consoleState.rejectionCount = 0;
+    consoleState.findingLimitHit = false;
+    lastConsoleFindingKey = null;
+    lastConsoleRowEl = null;
 
     byId("consoleStatus").textContent = "Capturing: " + tabLabel;
     logTo(byId("consoleLog"), "Attached to tab " + tabId + " (" + tabLabel + "). Watching for console errors/warnings, uncaught exceptions, and unhandled promise rejections.");
@@ -3138,7 +3204,7 @@
     consoleState.running = false;
     consoleState.endedAt = new Date();
 
-    byId("consoleStatus").textContent = "Stopped";
+    byId("consoleStatus").textContent = consoleState.findingLimitHit ? "Stopped (max events reached)" : "Stopped";
     logTo(byId("consoleLog"), "Capture stopped.");
     updateConsoleSummary();
   }
@@ -3439,6 +3505,9 @@
     consoleState.errorCount = 0;
     consoleState.warningCount = 0;
     consoleState.rejectionCount = 0;
+    consoleState.findingLimitHit = false;
+    lastConsoleFindingKey = null;
+    lastConsoleRowEl = null;
     byId("consoleResults").innerHTML = "<div class='empty'>No events captured yet.</div>";
     byId("consoleLog").textContent = "";
     updateConsoleSummary();
@@ -3449,12 +3518,13 @@
 
     downloadCsv(
       "console-error-capture.csv",
-      ["Time", "Type", "Message", "Page", "Recommendations", "Stack"],
+      ["Time", "Type", "Message", "Repeat Count", "Page", "Recommendations", "Stack"],
       consoleFindings.map(function (f) {
         return [
           new Date(f.time).toISOString(),
           consoleEventTypeLabel(f.type),
           f.message,
+          f.count || 1,
           f.pageUrl,
           f.recommendations.map(function (r) { return r.title; }).join("; "),
           f.stack
@@ -3514,6 +3584,7 @@
   byId("maxPages").value = String(DEFAULT_MAX_PAGES);
   byId("spellMaxFindings").value = String(SPELL_DEFAULT_MAX_FINDINGS);
   byId("wordMaxFindings").value = String(WORD_DEFAULT_MAX_FINDINGS);
+  byId("consoleMaxFindings").value = String(CONSOLE_DEFAULT_MAX_FINDINGS);
 
   // background.js passes ?start=<origin> when this tab was opened from the
   // toolbar icon on an http(s) page, so the scanner defaults to that domain.

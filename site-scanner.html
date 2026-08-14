@@ -834,7 +834,7 @@
   <div id="consolePanel" class="tab-panel">
     <div class="card">
       <div class="card-body">
-        <div class="note" style="margin-top:0;">Live capture, not a crawl: attaches to one open tab and watches it while you browse, catching uncaught exceptions, unhandled promise rejections, and console.error/console.warn calls from that page's own scripts. It does not catch browser-native "failed to load resource" network log lines (those never pass through the page's console) — use the Broken Links / Missing Images tabs for that. Capture stops on page navigation or tab close; click Start Capture again after either.</div>
+        <div class="note" style="margin-top:0;">Live capture, not a crawl: attaches to one open tab and watches it while you browse, catching uncaught exceptions, unhandled promise rejections, and console.error/console.warn calls from that page's own scripts. It does not catch browser-native "failed to load resource" network log lines (those never pass through the page's console) — use the Broken Links / Missing Images tabs for that. Capture stops on page navigation or tab close; click Start Capture again after either. The same message repeating back-to-back collapses into one entry with a repeat count instead of flooding the list.</div>
         <div class="field" style="margin-top:14px;">
           <label for="consoleTabSelect">Target tab</label>
           <div class="grid-2">
@@ -842,6 +842,11 @@
             <button id="consoleRefreshTabsBtn" class="ghost" type="button">Refresh tab list</button>
           </div>
           <div class="help">Pick the http(s) tab to attach to. Defaults to the tab this scanner was opened from, if any.</div>
+        </div>
+        <div class="field">
+          <label for="consoleMaxFindings">Max captured events</label>
+          <input id="consoleMaxFindings" type="number" min="25" max="5000" step="25" value="300" />
+          <div class="help">Capture auto-stops once this many distinct events are captured, so a noisy page can't grow the results list without bound. Repeats of the same message don't count against this.</div>
         </div>
         <div class="toolbar" style="margin-top:14px;">
           <button id="consoleStartBtn">Start capture</button>
