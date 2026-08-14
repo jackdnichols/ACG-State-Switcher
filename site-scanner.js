@@ -58,6 +58,10 @@
   var SPELL_DEFAULT_MAX_FINDINGS = 300;
   var WORD_DEFAULT_MAX_FINDINGS = 500;
   var CONSOLE_DEFAULT_MAX_FINDINGS = 300;
+  var CONSOLE_SCAN_DEFAULT_MAX_PAGES = 20;
+  var CONSOLE_SCAN_HARD_MAX_PAGES = 300;
+  var CONSOLE_SCAN_DEFAULT_SECONDS_PER_PAGE = 10;
+  var CONSOLE_SCAN_NAV_TIMEOUT_MS = 20000;
   var TRACKING_PARAMS = {
     cid: true, cmpid: true, gclid: true, fbclid: true, msclkid: true,
     campaign: true, source: true, medium: true, term: true, content: true
@@ -2959,12 +2963,14 @@
     return CONSOLE_ERROR_RULES.filter(function (rule) { return rule.test(message); });
   }
 
-  var consoleState = {
-    running: false, tabId: null, tabLabel: "",
-    startedAt: null, endedAt: null,
-    errorCount: 0, warningCount: 0, rejectionCount: 0,
-    findingLimitHit: false
-  };
+  var consoleState = createScanState("console");
+  consoleState.tabId = null;
+  consoleState.tabLabel = "";
+  consoleState.originPattern = null;
+  consoleState.errorCount = 0;
+  consoleState.warningCount = 0;
+  consoleState.rejectionCount = 0;
+
   var consoleFindings = [];
   var lastConsoleFindingKey = null;
   var lastConsoleRowEl = null;
@@ -2981,9 +2987,10 @@
   }
 
   function updateConsoleSummary() {
-    setText("consoleSumStatus", consoleState.running ? "Capturing" : (consoleState.startedAt ? "Stopped" : "Ready"));
+    setText("consoleSumStatus", consoleState.status);
     setText("consoleSumDuration", getDurationText(consoleState));
-    setText("consoleSumTarget", consoleState.tabLabel || "None");
+    setText("consoleSumPages", consoleState.pagesScanned + " / " + consoleState.maxPages);
+    setText("consoleSumQueued", consoleState.queued);
     setText("consoleSumEvents", consoleFindings.length);
     setText("consoleSumErrors", consoleState.errorCount);
     setText("consoleSumWarnings", consoleState.warningCount);
@@ -3080,6 +3087,7 @@
     var maxFindings = getConsoleMaxFindings();
     if (maxFindings > 0 && consoleFindings.length >= maxFindings) {
       consoleState.findingLimitHit = true;
+      consoleState.stop = true;
     }
 
     updateConsoleSummary();
@@ -3123,8 +3131,7 @@
     logTo(logEl, "[" + consoleEventTypeLabel(type) + "] " + message);
 
     if (consoleState.findingLimitHit) {
-      logTo(logEl, "Stopped at max captured events: " + maxFindings + ". Increase the limit, or Clear results and start again if you need more.");
-      stopConsoleCapture();
+      logTo(logEl, "Stopping at max captured events: " + maxFindings + ". Increase the limit, or Clear results and start again if you need more.");
     }
   }
 
@@ -3187,63 +3194,79 @@
     } catch (e) { /* already gone — fine */ }
   }
 
-  async function startConsoleCapture() {
-    if (consoleState.running) { alert("Console capture is already running."); return; }
+  function getConsoleMaxPages() {
+    var input = byId("consoleMaxPages");
+    var value = parseInt(input.value, 10);
 
-    var select = byId("consoleTabSelect");
-    var tabId = Number(select.value);
-    if (!tabId) { alert("Pick a target tab first."); return; }
+    if (isNaN(value) || value < 1) value = CONSOLE_SCAN_DEFAULT_MAX_PAGES;
+    if (value > CONSOLE_SCAN_HARD_MAX_PAGES) value = CONSOLE_SCAN_HARD_MAX_PAGES;
 
-    var tabLabel = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : ("tab " + tabId);
-
-    var originPattern;
-    try {
-      var tab = await chrome.tabs.get(tabId);
-      originPattern = new URL(tab.url).origin + "/*";
-    } catch (e) {
-      alert("Could not read that tab's URL: " + (e && e.message ? e.message : e));
-      return;
-    }
-
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        world: "MAIN",
-        files: ["console-capture-main.js"]
-      });
-      await chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ["console-capture-relay.js"]
-      });
-      await registerPersistentConsoleCapture(originPattern);
-    } catch (e) {
-      alert("Could not attach to that tab: " + (e && e.message ? e.message : e));
-      return;
-    }
-
-    consoleState.running = true;
-    consoleState.tabId = tabId;
-    consoleState.tabLabel = tabLabel;
-    consoleState.originPattern = originPattern;
-    consoleState.startedAt = new Date();
-    consoleState.endedAt = null;
-    consoleState.errorCount = 0;
-    consoleState.warningCount = 0;
-    consoleState.rejectionCount = 0;
-    consoleState.findingLimitHit = false;
-    lastConsoleFindingKey = null;
-    lastConsoleRowEl = null;
-
-    byId("consoleStatus").textContent = "Capturing: " + tabLabel;
-    logTo(byId("consoleLog"), "Attached to tab " + tabId + " (" + tabLabel + "). Watching for console errors/warnings, uncaught exceptions, and unhandled promise rejections. Also armed to reattach automatically at page-load time on reload/navigation within " + originPattern + ", so init-time errors (tag managers, etc.) get caught too.");
-    updateConsoleSummary();
+    input.value = String(value);
+    return value;
   }
 
-  async function stopConsoleCapture() {
-    if (!consoleState.running) { alert("Console capture isn't running."); return; }
+  function getConsoleSecondsPerPage() {
+    var input = byId("consoleSecondsPerPage");
+    var value = parseInt(input.value, 10);
 
-    var tabId = consoleState.tabId;
+    if (isNaN(value) || value < 3) value = CONSOLE_SCAN_DEFAULT_SECONDS_PER_PAGE;
+    if (value > 60) value = 60;
 
+    input.value = String(value);
+    return value;
+  }
+
+  function waitForTabLoad(tabId, timeoutMs) {
+    return new Promise(function (resolve) {
+      var done = false;
+
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(false);
+      }, timeoutMs);
+
+      function listener(updatedTabId, changeInfo) {
+        if (updatedTabId !== tabId || changeInfo.status !== "complete") return;
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(true);
+      }
+
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+  }
+
+  async function navigateConsoleScanTab(tabId, url) {
+    var tab = await chrome.tabs.get(tabId);
+    if (tab.url === url) {
+      await chrome.tabs.reload(tabId);
+    } else {
+      await chrome.tabs.update(tabId, { url: url });
+    }
+    await waitForTabLoad(tabId, CONSOLE_SCAN_NAV_TIMEOUT_MS);
+  }
+
+  async function extractLinksFromLiveTab(tabId, pageUrl) {
+    try {
+      var results = await chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        func: function () {
+          return Array.prototype.slice.call(document.querySelectorAll("a[href]")).map(function (a) { return a.href; });
+        }
+      });
+      var raw = (results && results[0] && results[0].result) || [];
+      return raw.map(function (href) { return normalize(href, pageUrl); }).filter(Boolean);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async function detachConsoleScan(tabId) {
+    try { await unregisterPersistentConsoleCapture(); } catch (e) { /* ignore */ }
     try {
       await chrome.scripting.executeScript({
         target: { tabId: tabId },
@@ -3254,19 +3277,139 @@
           }
         }
       });
+    } catch (e) { /* tab may have navigated to another origin or closed */ }
+  }
+
+  async function runConsoleScan() {
+    if (consoleState.running) { alert("A console scan is already running."); return; }
+
+    var select = byId("consoleTabSelect");
+    var tabId = Number(select.value);
+    if (!tabId) { alert("Pick a target tab first."); return; }
+
+    var statusEl = byId("consoleStatus");
+    var logEl = byId("consoleLog");
+    var resultsEl = byId("consoleResults");
+
+    var startTab;
+    try {
+      startTab = await chrome.tabs.get(tabId);
     } catch (e) {
-      // Tab may have navigated or closed — nothing to clean up in that case.
-      logTo(byId("consoleLog"), "Could not detach cleanly (tab may have navigated or closed): " + (e && e.message ? e.message : e));
+      alert("Could not read that tab: " + (e && e.message ? e.message : e));
+      return;
     }
 
-    await unregisterPersistentConsoleCapture();
+    var startUrl;
+    try {
+      startUrl = new URL(startTab.url);
+      if (!isScannableUrl(startUrl.href)) throw new Error("not http(s)");
+    } catch (e) {
+      alert("Target tab must be an http(s) page.");
+      return;
+    }
 
-    consoleState.running = false;
-    consoleState.endedAt = new Date();
+    consoleFindings = [];
+    lastConsoleFindingKey = null;
+    lastConsoleRowEl = null;
+    logEl.textContent = "";
+    resultsEl.innerHTML = "<div class='empty'>No events captured yet.</div>";
 
-    byId("consoleStatus").textContent = consoleState.findingLimitHit ? "Stopped (max events reached)" : "Stopped";
-    logTo(byId("consoleLog"), "Capture stopped.");
+    var maxPages = getConsoleMaxPages();
+    var secondsPerPage = getConsoleSecondsPerPage();
+    resetScanState(consoleState, maxPages);
+    consoleState.tabId = tabId;
+    consoleState.tabLabel = (startTab.title ? startTab.title + " — " : "") + startTab.url;
+    consoleState.errorCount = 0;
+    consoleState.warningCount = 0;
+    consoleState.rejectionCount = 0;
     updateConsoleSummary();
+
+    var origin = startUrl.origin;
+    var originPattern = origin + "/*";
+    consoleState.originPattern = originPattern;
+
+    try {
+      await registerPersistentConsoleCapture(originPattern);
+    } catch (e) {
+      consoleState.errors++;
+      finishScanState(consoleState, "Error");
+      statusEl.textContent = "Could not arm console capture: " + (e && e.message ? e.message : e);
+      updateConsoleSummary();
+      return;
+    }
+
+    logTo(logEl, "Starting console scan...");
+    logTo(logEl, "Driving tab " + tabId + ", origin: " + origin);
+    logTo(logEl, "Max pages: " + maxPages + " | Seconds per page: " + secondsPerPage);
+
+    var firstUrl = normalize(startUrl.href, startUrl.href);
+    var queue = [firstUrl];
+    var visited = {};
+    var queued = {};
+    queued[canonicalizePageUrl(firstUrl)] = true;
+
+    while (queue.length && !consoleState.stop) {
+      var url = queue.shift();
+      var urlKey = canonicalizePageUrl(url);
+      if (!url || visited[urlKey]) continue;
+
+      visited[urlKey] = true;
+      consoleState.pagesScanned = Object.keys(visited).length;
+      consoleState.queued = queue.length;
+
+      statusEl.textContent = "Scanning " + consoleState.pagesScanned + " of max " + maxPages +
+        " | queued " + queue.length + " | events " + consoleFindings.length;
+      updateConsoleSummary();
+      logTo(logEl, "Navigating to: " + url);
+
+      try {
+        await navigateConsoleScanTab(tabId, url);
+      } catch (e) {
+        consoleState.skipped++;
+        consoleState.errors++;
+        logTo(logEl, "SKIP (navigation failed): " + url + " — " + (e && e.message ? e.message : e));
+        updateConsoleSummary();
+        if (consoleState.stop) break;
+        continue;
+      }
+
+      logTo(logEl, "Loaded. Watching for " + secondsPerPage + "s...");
+      await sleep(secondsPerPage * 1000);
+
+      if (consoleState.stop) break;
+
+      var links = await extractLinksFromLiveTab(tabId, url);
+      links.forEach(function (link) {
+        var linkKey = canonicalizePageUrl(link);
+        if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[linkKey] && !queued[linkKey]) {
+          queue.push(link);
+          queued[linkKey] = true;
+        }
+      });
+
+      consoleState.queued = queue.length;
+      updateConsoleSummary();
+
+      if (Object.keys(visited).length >= maxPages) {
+        logTo(logEl, "Stopped at max page limit: " + maxPages);
+        break;
+      }
+    }
+
+    await detachConsoleScan(tabId);
+
+    var finalStatus = consoleState.findingLimitHit ? "Finding limit hit" : (consoleState.stop ? "Stopped" : "Complete");
+    finishScanState(consoleState, finalStatus);
+    statusEl.textContent = finalStatus === "Complete" ? "Scan complete" : finalStatus;
+    logTo(logEl, "Done. Pages scanned: " + consoleState.pagesScanned + " | Events: " + consoleFindings.length);
+    updateConsoleSummary();
+  }
+
+  function stopConsoleScan() {
+    if (!consoleState.running) { alert("No console scan is running."); return; }
+    consoleState.stop = true;
+    consoleState.status = "Stopping";
+    byId("consoleStatus").textContent = "Stopping...";
   }
 
   /* =========================
@@ -3557,8 +3700,8 @@
   };
 
   byId("consoleRefreshTabsBtn").onclick = function () { refreshConsoleTabList(); };
-  byId("consoleStartBtn").onclick = function () { startConsoleCapture(); };
-  byId("consoleStopBtn").onclick = function () { stopConsoleCapture(); };
+  byId("consoleStartBtn").onclick = function () { runConsoleScan(); };
+  byId("consoleStopBtn").onclick = function () { stopConsoleScan(); };
 
   byId("consoleClearBtn").onclick = function () {
     consoleFindings = [];
@@ -3645,6 +3788,8 @@
   byId("spellMaxFindings").value = String(SPELL_DEFAULT_MAX_FINDINGS);
   byId("wordMaxFindings").value = String(WORD_DEFAULT_MAX_FINDINGS);
   byId("consoleMaxFindings").value = String(CONSOLE_DEFAULT_MAX_FINDINGS);
+  byId("consoleMaxPages").value = String(CONSOLE_SCAN_DEFAULT_MAX_PAGES);
+  byId("consoleSecondsPerPage").value = String(CONSOLE_SCAN_DEFAULT_SECONDS_PER_PAGE);
 
   // background.js passes ?start=<origin> when this tab was opened from the
   // toolbar icon on an http(s) page, so the scanner defaults to that domain.
@@ -3673,7 +3818,7 @@
   logTo(byId("auditLog"), "Page audit ready.");
 
   byId("consoleStatus").textContent = "Ready";
-  logTo(byId("consoleLog"), "Console error capture ready. Pick a target tab and click Start capture.");
+  logTo(byId("consoleLog"), "Console scan ready. Pick a target tab and click Start console scan.");
 
   updateLowerSummary();
   updateImageSummary();

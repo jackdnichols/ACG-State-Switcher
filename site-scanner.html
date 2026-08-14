@@ -834,23 +834,35 @@
   <div id="consolePanel" class="tab-panel">
     <div class="card">
       <div class="card-body">
-        <div class="note" style="margin-top:0;">Live capture, not a crawl: attaches to one open tab and watches it while you browse, catching uncaught exceptions, unhandled promise rejections, and console.error/console.warn calls from that page's own scripts. It does not catch browser-native "failed to load resource" network log lines (those never pass through the page's console) — use the Broken Links / Missing Images tabs for that. Start Capture also arms it to reattach automatically at page-load time on that tab's origin, so it catches page-init/tag-manager errors on reload too, not just ones that happen after you've already attached — reload the tab after starting capture if you want to catch those. That auto-reattach is scoped to the origin, not the specific tab, so other tabs already open on the same site will get hooked on their next load too (their events are ignored unless you pick them as the target). Capture fully stops on tab close, or navigating to a different origin; click Start Capture again after either. The same message repeating back-to-back collapses into one entry with a repeat count instead of flooding the list.</div>
+        <div class="note" style="margin-top:0;">A scan, not a live monitor: drives one of your open tabs through same-origin pages one at a time (reload, then watch for a fixed window), catching uncaught exceptions, unhandled promise rejections, and console.error/console.warn calls — including page-init/tag-manager errors, since the hook is in place before each page's own scripts run. Your browser tab will visibly navigate through the site while this runs; don't use it for anything else until the scan finishes or you click Stop. It does not catch browser-native "failed to load resource" network log lines (use Broken Links/Missing Images for those) or anything logged inside a cross-origin iframe (chat widgets, ad tags, etc. — those have their own isolated console). The same message repeating back-to-back on one page collapses into one entry with a repeat count.</div>
         <div class="field" style="margin-top:14px;">
           <label for="consoleTabSelect">Target tab</label>
           <div class="grid-2">
             <select id="consoleTabSelect"></select>
             <button id="consoleRefreshTabsBtn" class="ghost" type="button">Refresh tab list</button>
           </div>
-          <div class="help">Pick the http(s) tab to attach to. Defaults to the tab this scanner was opened from, if any.</div>
+          <div class="help">The tab the scan will drive. Defaults to the tab this scanner was opened from, if any.</div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="consoleMaxPages">Max pages</label>
+            <input id="consoleMaxPages" type="number" min="1" max="300" step="1" value="20" />
+            <div class="help">Each page takes at least "Seconds per page" to scan, so keep this modest — 20 pages at 10s each is already ~3-4 minutes.</div>
+          </div>
+          <div class="field">
+            <label for="consoleSecondsPerPage">Seconds per page</label>
+            <input id="consoleSecondsPerPage" type="number" min="3" max="60" step="1" value="10" />
+            <div class="help">How long to watch each page after it loads before moving to the next.</div>
+          </div>
         </div>
         <div class="field">
           <label for="consoleMaxFindings">Max captured events</label>
           <input id="consoleMaxFindings" type="number" min="25" max="5000" step="25" value="300" />
-          <div class="help">Capture auto-stops once this many distinct events are captured, so a noisy page can't grow the results list without bound. Repeats of the same message don't count against this.</div>
+          <div class="help">Scan auto-stops once this many distinct events are captured, so a noisy site can't grow the results list without bound. Repeats of the same message don't count against this.</div>
         </div>
         <div class="toolbar" style="margin-top:14px;">
-          <button id="consoleStartBtn">Start capture</button>
-          <button id="consoleStopBtn" class="secondary">Stop capture</button>
+          <button id="consoleStartBtn">Start console scan</button>
+          <button id="consoleStopBtn" class="secondary">Stop scan</button>
           <button id="consoleClearBtn" class="secondary">Clear results</button>
           <button id="consoleExportBtn" class="ghost">Download CSV</button>
         </div>
@@ -859,11 +871,12 @@
 
     <div id="consoleStatus" class="status">Ready</div>
 
-    <div class="section-title">Capture summary</div>
+    <div class="section-title">Console scan summary</div>
     <div class="summary-grid">
       <div class="stat"><div class="k">Status</div><div class="v" id="consoleSumStatus">Ready</div></div>
       <div class="stat"><div class="k">Duration</div><div class="v" id="consoleSumDuration">0s</div></div>
-      <div class="stat"><div class="k">Target tab</div><div class="v" id="consoleSumTarget">None</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="consoleSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="consoleSumQueued">0</div></div>
       <div class="stat"><div class="k">Total events</div><div class="v" id="consoleSumEvents">0</div></div>
       <div class="stat"><div class="k">Exceptions</div><div class="v" id="consoleSumErrors">0</div></div>
       <div class="stat"><div class="k">Warnings</div><div class="v" id="consoleSumWarnings">0</div></div>
@@ -874,7 +887,7 @@
     <div id="consoleResults" class="results"><div class="empty">No events captured yet.</div></div>
 
     <div class="log-panel">
-      <div class="log-head">Console capture log</div>
+      <div class="log-head">Console scan log</div>
       <div id="consoleLog" class="log"></div>
     </div>
   </div>
