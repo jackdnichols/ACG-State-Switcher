@@ -3140,6 +3140,53 @@
     handleConsoleCaptureMessage(message, sender);
   });
 
+  var CONSOLE_CAPTURE_MAIN_SCRIPT_ID = "acg-console-capture-main";
+  var CONSOLE_CAPTURE_RELAY_SCRIPT_ID = "acg-console-capture-relay";
+
+  // Beyond hooking the tab's current (already-loaded) page, arm a dynamic
+  // content script scoped to that tab's origin so the hook reinstalls
+  // itself automatically at document_start on the next load/reload —
+  // otherwise errors that only fire once during page/tag-manager init
+  // (the common case for Tealium/vendor tag failures) happen before a
+  // one-time injection into an already-loaded tab could ever see them.
+  // Origin-scoped, not tab-scoped (chrome.scripting has no such concept),
+  // so other tabs already on the same origin would also get hooked on
+  // their next load — harmless, since events are still filtered down to
+  // the selected tab's id before being recorded.
+  async function registerPersistentConsoleCapture(originPattern) {
+    try {
+      await chrome.scripting.unregisterContentScripts({
+        ids: [CONSOLE_CAPTURE_MAIN_SCRIPT_ID, CONSOLE_CAPTURE_RELAY_SCRIPT_ID]
+      });
+    } catch (e) { /* nothing registered yet — fine */ }
+
+    await chrome.scripting.registerContentScripts([
+      {
+        id: CONSOLE_CAPTURE_MAIN_SCRIPT_ID,
+        matches: [originPattern],
+        js: ["console-capture-main.js"],
+        runAt: "document_start",
+        world: "MAIN",
+        persistAcrossSessions: false
+      },
+      {
+        id: CONSOLE_CAPTURE_RELAY_SCRIPT_ID,
+        matches: [originPattern],
+        js: ["console-capture-relay.js"],
+        runAt: "document_start",
+        persistAcrossSessions: false
+      }
+    ]);
+  }
+
+  async function unregisterPersistentConsoleCapture() {
+    try {
+      await chrome.scripting.unregisterContentScripts({
+        ids: [CONSOLE_CAPTURE_MAIN_SCRIPT_ID, CONSOLE_CAPTURE_RELAY_SCRIPT_ID]
+      });
+    } catch (e) { /* already gone — fine */ }
+  }
+
   async function startConsoleCapture() {
     if (consoleState.running) { alert("Console capture is already running."); return; }
 
@@ -3148,6 +3195,15 @@
     if (!tabId) { alert("Pick a target tab first."); return; }
 
     var tabLabel = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : ("tab " + tabId);
+
+    var originPattern;
+    try {
+      var tab = await chrome.tabs.get(tabId);
+      originPattern = new URL(tab.url).origin + "/*";
+    } catch (e) {
+      alert("Could not read that tab's URL: " + (e && e.message ? e.message : e));
+      return;
+    }
 
     try {
       await chrome.scripting.executeScript({
@@ -3159,6 +3215,7 @@
         target: { tabId: tabId },
         files: ["console-capture-relay.js"]
       });
+      await registerPersistentConsoleCapture(originPattern);
     } catch (e) {
       alert("Could not attach to that tab: " + (e && e.message ? e.message : e));
       return;
@@ -3167,6 +3224,7 @@
     consoleState.running = true;
     consoleState.tabId = tabId;
     consoleState.tabLabel = tabLabel;
+    consoleState.originPattern = originPattern;
     consoleState.startedAt = new Date();
     consoleState.endedAt = null;
     consoleState.errorCount = 0;
@@ -3177,7 +3235,7 @@
     lastConsoleRowEl = null;
 
     byId("consoleStatus").textContent = "Capturing: " + tabLabel;
-    logTo(byId("consoleLog"), "Attached to tab " + tabId + " (" + tabLabel + "). Watching for console errors/warnings, uncaught exceptions, and unhandled promise rejections.");
+    logTo(byId("consoleLog"), "Attached to tab " + tabId + " (" + tabLabel + "). Watching for console errors/warnings, uncaught exceptions, and unhandled promise rejections. Also armed to reattach automatically at page-load time on reload/navigation within " + originPattern + ", so init-time errors (tag managers, etc.) get caught too.");
     updateConsoleSummary();
   }
 
@@ -3200,6 +3258,8 @@
       // Tab may have navigated or closed — nothing to clean up in that case.
       logTo(byId("consoleLog"), "Could not detach cleanly (tab may have navigated or closed): " + (e && e.message ? e.message : e));
     }
+
+    await unregisterPersistentConsoleCapture();
 
     consoleState.running = false;
     consoleState.endedAt = new Date();
