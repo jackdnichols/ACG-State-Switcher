@@ -2983,6 +2983,16 @@
         return "An Adobe Target activity has a " + eventType + " metric configured to track " + selector +
           ", but that element doesn't exist on this page. Usually means the activity's page/audience targeting is broader than the pages that actually have that element (e.g. a metric meant for a different page or flow is still being evaluated here). Check that activity's metric configuration in Adobe Target (or the Tealium extension driving it) and either scope it to the right pages or fix the selector.";
       }
+    },
+    {
+      test: function (msg) { return /failed actions/i.test(msg) && /trackclick/i.test(msg); },
+      title: "Adobe Target click-tracking actions failed to bind",
+      recommendation: "One or more click-tracking (trackClick) actions failed to attach — same root cause as the \"metric element not found\" warnings: the selector(s) referenced in this message's JSON don't exist on this page. Check each selector against the page and either fix that activity's page targeting in Adobe Target or fix the selector."
+    },
+    {
+      test: function (msg) { return /embeddedservice(bootstrap|messaging)/i.test(msg); },
+      title: "Salesforce Embedded Service (chat widget) — native function overridden",
+      recommendation: "The Salesforce Embedded Service (chat/messaging widget) is warning that a native browser function it depends on (e.g. window.clearTimeout) has been reassigned/monkey-patched by something else on the page, which can break its internal timers. Find what else on the page is overriding that native function — check other vendor tags/scripts, especially ones loading before the Embedded Service snippet — and make sure it either restores the original afterward or doesn't touch it at all."
     }
   ];
 
