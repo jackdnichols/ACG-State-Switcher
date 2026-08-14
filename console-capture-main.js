@@ -5,7 +5,13 @@
 // which forwards them to the extension over chrome.runtime.sendMessage.
 (function () {
   var NS = "__acgConsoleCapture";
-  if (window[NS] && window[NS].active) return;
+
+  // Always tear down and reinstall fresh, rather than no-op'ing when a
+  // hook already exists — keeps this consistent with console-capture-
+  // relay.js's same always-reattach approach, and guarantees a Start
+  // Capture click can't inherit a stale console.error/console.warn
+  // reference from an earlier injection.
+  if (window[NS] && window[NS].stop) window[NS].stop();
 
   var originalError = console.error;
   var originalWarn = console.warn;
