@@ -10,24 +10,37 @@
 </head>
 <body>
   <h1>Privacy Policy</h1>
-  <p><strong>ACG Utilities State Switcher</strong> is a browser extension for developer and QA workflows on ACG/AAA web properties.</p>
+  <p><strong>ACG Utilities State Switcher</strong> is a browser extension for developer and QA workflows, built for internal use on ACG/AAA/Meemic web properties and AEM Author environments, plus a general-purpose Site Scanner.</p>
+  <p><em>Last updated: 2026-08-14.</em></p>
 
   <h2>Data collection</h2>
-  <p>The extension does not collect, transmit, sell, or share personal data. It does not send browsing history, cookies, page content, custom ideas, or selected state information to any external server.</p>
+  <p>The extension does not collect, transmit, sell, or share personal data with any external server. Everything it reads (page content, console output, cookies, open tab titles/URLs) stays in the local browser; nothing leaves the device except when the user explicitly clicks a CSV/JSON export button, which saves a file to the user's own disk.</p>
 
   <h2>Local storage</h2>
-  <p>The extension stores preferences locally in the browser, including popup theme, active tab, selected environment, badge settings, custom A/B test ideas entered by the user, and a temporary selected ACG state/ZIP override used to complete the state-switching workflow. These values remain in the browser unless removed by the user or browser.</p>
+  <p>The extension stores preferences locally in the browser via <code>chrome.storage</code>, including: popup theme, active tab, selected environment, environment badge position/mode settings, custom A/B test ideas entered by the user, a temporary selected ACG state/ZIP override used to complete the state-switching workflow, and — for Site Scanner — saved scan presets and per-origin scan history (used only to flag which findings are new since the last run). These values remain in the browser unless removed by the user or browser.</p>
 
   <h2>Cookie access</h2>
   <p>The extension reads and writes only the cookies needed for its user-facing ACG state-switching feature, such as <code>AEM.state</code>, <code>zipcode</code>, and related ACG location cookies. Cookie access is used only to make the selected ACG state take effect in the current browser session.</p>
 
-  <h2>Site Inspector</h2>
-  <p>The Site Inspector tool fetches pages, images, and scripts from acg.aaa.com, meemic.com, and meemicfoundation.org (and their subdomains) that the user starts a scan against, so it can check for broken links/images, environment leaks, spelling issues, and search terms. This is hard-scoped in code to those three sites — no setting can make it fetch or send credentials to any other domain. Scan results stay in the browser tab and are only written to disk if the user clicks a CSV export button; nothing is transmitted to any external server.</p>
+  <h2>Site Scanner</h2>
+  <p>Site Scanner fetches pages, images, and scripts from whatever http(s) site the user enters as a Start URL, so it can check for broken links/images, mixed content, lower-environment leaks, spelling issues, basic SEO/accessibility issues, and search terms. It only acts on sites the user explicitly points it at — it does not run automatically or scan in the background. Scan results stay in the browser tab and are only written to disk if the user clicks an export button; nothing is transmitted to any external server. This feature is why the extension requests broad host access (all http/https sites) rather than a fixed allowlist — see "Host permissions" below.</p>
+
+  <h2>Console Error Capture</h2>
+  <p>Console Error Capture is a Site Scanner feature that watches for JavaScript errors, warnings, and unhandled promise rejections on a browser tab the user explicitly selects from a list of that user's own open tabs. When started, it injects a small script into the selected tab to observe its console output, and (for the duration of that scan only) navigates that tab through same-origin pages one at a time to catch errors that occur during page load. It only runs on the tab the user picks, only while a scan is actively running, and stops when the scan finishes, is stopped, or the tab is closed or navigated to a different site. Captured console messages and the pages they occurred on stay in the browser and are only written to disk via an explicit export button.</p>
+
+  <h2>Tab information access</h2>
+  <p>To populate the "target tab" picker for Console Error Capture, the extension reads the titles and URLs of the user's own currently-open http(s) browser tabs via the browser's tabs API. This is used only to build that picker list in the extension's own UI and is never transmitted anywhere.</p>
+
+  <h2>Host permissions</h2>
+  <p>The extension requests access to: aaa.com/acg.aaa.com, meemic.com, meemicfoundation.org, and their subdomains (for the state switcher); a small, fixed set of AEM Author host names (for the environment badge); and all http(s) sites (for Site Scanner, which is designed to be pointed at any site, not just ACG/Meemic properties). The state switcher and environment badge only ever act on their own listed hosts regardless of the broader grant — Site Scanner is the only feature that uses the all-sites permission, and only for sites the user explicitly starts a scan or capture against.</p>
 
   <h2>Remote code</h2>
-  <p>The extension does not load or execute remotely hosted code. Its functionality is contained in the submitted extension package.</p>
+  <p>The extension does not load or execute remotely hosted code. Its functionality is contained entirely in the submitted extension package.</p>
 
-  <h2>Affiliation</h2>
-  <p>This extension is not affiliated with AAA or its subsidiaries unless distributed by an authorized publisher.</p>
+  <h2>Distribution</h2>
+  <p>This extension is distributed privately for internal use and is not affiliated with AAA or its subsidiaries unless distributed by an authorized publisher.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy or the extension's data handling can be directed to the publisher listed on this extension's store listing.</p>
 </body>
 </html>

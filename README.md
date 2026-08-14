@@ -17,11 +17,31 @@ The extension runs locally in the browser. It does not send browsing data, cooki
 ## Store review notes
 
 - Manifest V3.
-- No remotely hosted code.
-- No eval/new Function.
+- No remotely hosted code — everything ships in the submitted package.
+- No `eval`/`new Function` anywhere in the codebase (verified 2026-08-14 against all shipped `.js` files).
+- Every `innerHTML` write in the codebase uses a static/hardcoded string (empty-state placeholders, clearing content); any data captured from a page (console messages, page titles, scan findings) is inserted via `textContent`, never `innerHTML` (verified 2026-08-14) — no injection risk from scanned/captured content.
 - No captured cookie bundles are packaged.
-- Host access: AAA/ACG/Meemic/Meemic Foundation pages for the state switcher, the specific AEM Author hosts for the author badge, and — as of v1.99 — all http(s) origins (`http://*/*`, `https://*/*`) for Site Scanner, which is intentionally not scoped to any allowlist so it can be pointed at any site. The state switcher and author badge only ever act on their own scoped hosts regardless of this broader grant; Site Scanner is the only feature that uses it.
-- Console Error Capture only attaches to a tab you explicitly pick and injects only while a capture is running; it does not run automatically on every page.
+- Host access: AAA/ACG/Meemic/Meemic Foundation pages for the state switcher, the specific AEM Author hosts for the author badge, and all http(s) origins (`http://*/*`, `https://*/*`) for Site Scanner, which is intentionally not scoped to any allowlist so it can be pointed at any site. The state switcher and author badge only ever act on their own scoped hosts regardless of this broader grant; Site Scanner is the only feature that uses it.
+- Console Error Capture only attaches to a tab the user explicitly picks and only while a scan is actively running; it does not run automatically on every page. See `privacy.html` for the full breakdown of what it reads and when.
+- `privacy.html` is kept current with what the extension actually does — last synced with the codebase 2026-08-14 (covers Site Scanner's any-site scope and Console Error Capture in full, not just the original ACG-scoped Site Inspector).
+
+### Permission justifications (for the store dashboard's Privacy Practices / permissions-justification fields)
+
+- `storage` — local preferences, scan presets/history, badge settings. Never transmitted.
+- `scripting` — inject the state-switcher's page helpers on AEM Author/ACG pages, and Site Scanner's crawl/console-capture logic on pages the user explicitly scans.
+- `activeTab` — read the active tab's URL to prefill Site Scanner's Start URL and the A/B idea generator's page-type detection.
+- `cookies` — read/write only the specific ACG state/ZIP cookies needed for the state-switching feature.
+- `host_permissions` (all http/https) — required for Site Scanner and Console Error Capture to work on any site the user points them at, not just ACG/Meemic. Every other feature stays scoped to its own fixed host list regardless of this grant.
+
+### Publishing (not code — needs a developer account and dashboard access)
+
+This extension is intended for **private/unlisted distribution to this org only**, not a public store listing. The following steps happen in the Chrome Web Store Developer Dashboard and Microsoft Edge Partner Center, not in this repo, and need whoever holds those developer accounts:
+
+1. Zip the extension folder (excluding `.git`, `.claude`, and this README) and upload it as a new item in each dashboard.
+2. Set visibility to **Private** (Chrome: restricted to specific Google accounts or a Google Workspace domain; Edge: restricted within your Partner Center tenant) — not Public.
+3. Host `privacy.html` somewhere with a real, publicly-reachable URL (e.g. GitHub Pages, or an internal AAA-hosted URL) and paste that URL into each dashboard's privacy policy field — a local file path won't be accepted.
+4. Fill in the store listing fields: category, short/long description (the manifest `description` above is already trimmed to Chrome's 132-character limit), and screenshots/promotional images (1280x800 or 640x400 for Chrome; similar for Edge) — these need to be captured from the running extension, which needs a real browser session.
+5. Submit for review under the account's developer registration (Chrome has a one-time $5 registration fee per developer account if not already registered).
 
 Not affiliated with AAA or its subsidiaries unless submitted by an authorized publisher.
 
@@ -32,6 +52,7 @@ Not affiliated with AAA or its subsidiaries unless submitted by an authorized pu
 - Added Console Error Capture: live JS error/warning capture on a tab of your choosing, with pattern-matched fix recommendations (load-order issues, null/undefined access, CORS, CSP, unhandled rejections, Tealium/jQuery-specific hints, and more).
 - During testing on a live acg.aaa.com tab, fixed Console Error Capture going silent after an extension reload (stale listener bound to an invalidated context), fixed unbounded flooding from a repeating console message, and armed capture to reattach automatically at page-load time on reload so page-init/tag-manager errors (confirmed with a real Invoca tag warning) get caught, not just ones that happen after you've already attached.
 - Also confirmed against acg.aaa.com: all 7 crawl-based scanners (Lower Env Links, Broken Links, Missing Images, Mixed Content, Spell Check, Page Audit, Word Search) run via "Run all" and complete as expected. Console Error Capture is live from Start Capture onward (no reload needed to catch new errors as they happen) — reload is only needed to additionally catch page-init-time errors that already fired before capture attached.
+- Prepped for private store submission (Chrome Web Store / Edge Add-ons): fixed `manifest.json`'s `description` regressing past the 132-character limit during the Site Scanner merge, rewrote `privacy.html` (was still describing the old ACG-only-scoped Site Inspector, didn't mention Console Error Capture at all), and expanded the Store review notes below into a permission-justification writeup and a publishing checklist for whoever holds the developer accounts.
 
 ## v1.98
 - Rewrote Site Inspector's scanning logic as a direct port of the proven Tealium Site QA Scanner (`ACG/Tealium/Site Scanner.js`) instead of the ad hoc scanner it shipped with in v1.95/v1.96: real lower-environment pattern matching, image candidate collection (including srcset/lazy attrs/meta/CSS backgrounds), the real spell dictionary and misspelling list, and a new Word Search tool. The Tealium script's own ACG state/region cookie switcher was intentionally left out — it would duplicate and conflict with this extension's own state-keeper.js/state-cookie-guard.js mechanism, which is more robust (drives the real zip-lookup flow instead of just writing cookies).
