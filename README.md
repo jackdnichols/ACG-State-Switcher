@@ -1,4 +1,4 @@
-# ACG Utilities State Switcher v1.98
+# ACG Utilities State Switcher v1.99
 
 Developer utility for ACG/AAA web testing.
 
@@ -7,8 +7,8 @@ Developer utility for ACG/AAA web testing.
 - Switches ACG regional state behavior by launching ACG's current zip-only lookup flow.
 - Opens quick links for ACG, Meemic, Meemic Foundation, and AEM Author environments.
 - Generates local, template-based Adobe Target/A/B test ideas from the active tab, with auto-detected page type and priority ranking.
-- Shows an optional AEM Author environment badge.
-- Site Inspector: four scanners ported from the Tealium Site QA Scanner utility (lower-environment link leaks, missing images, spelling/typos, and free-text word search). Hard-scoped in code to acg.aaa.com, meemic.com, and meemicfoundation.org (and their subdomains) — no setting can make it fetch or send credentials to any other domain. Opens as its own tab so long scans survive the popup closing. Because it runs as an extension page rather than injected into the target site, it does not carry the target site's SameSite=Lax/Strict session cookies (a browser-level restriction, not a setting) — scans see what a logged-out visitor sees.
+- Shows an optional environment badge on AEM Authoring pages (the AEM Author hosts listed under Store review notes below) so it's obvious at a glance which author environment a tab is on.
+- Site Scanner: point it at any http(s) site (not just ACG/Meemic) to run lower-environment link leak, broken link, missing image, mixed content, spelling/typo, basic SEO/accessibility page audit, and free-text word search scans, plus live Console Error Capture — attach to an open tab and get pattern-matched fix recommendations for uncaught exceptions, unhandled promise rejections, and console.error/console.warn calls as they happen. Opens as its own tab so long scans survive the popup closing. Crawl-based scans run as an extension page rather than injected into the target site, so they don't carry the target site's SameSite=Lax/Strict session cookies (a browser-level restriction, not a setting) — those scans see what a logged-out visitor sees. Console Error Capture is different: it injects directly into the tab you point it at, so it sees that tab's real console output.
 
 ## Privacy
 
@@ -20,11 +20,16 @@ The extension runs locally in the browser. It does not send browsing data, cooki
 - No remotely hosted code.
 - No eval/new Function.
 - No captured cookie bundles are packaged.
-- Host access is limited to AAA/ACG/Meemic/Meemic Foundation pages needed for the state switcher and Site Inspector, and the specific AEM Author hosts needed for the author badge.
-- Site Inspector's domain allowlist (acg.aaa.com, meemic.com, meemicfoundation.org) is enforced in site-inspector.js itself, not just the UI, so it cannot fetch or send credentials to any other domain regardless of user settings.
+- Host access: AAA/ACG/Meemic/Meemic Foundation pages for the state switcher, the specific AEM Author hosts for the author badge, and — as of v1.99 — all http(s) origins (`http://*/*`, `https://*/*`) for Site Scanner, which is intentionally not scoped to any allowlist so it can be pointed at any site. The state switcher and author badge only ever act on their own scoped hosts regardless of this broader grant; Site Scanner is the only feature that uses it.
+- Console Error Capture only attaches to a tab you explicitly pick and injects only while a capture is running; it does not run automatically on every page.
 
 Not affiliated with AAA or its subsidiaries unless submitted by an authorized publisher.
 
+
+## v1.99
+- Merged in the standalone Site-Scanner project's scanning engine, replacing the old domain-scoped Site Inspector: same lower-env/image/spell/word scanners as before, plus Broken Links, Mixed Content, and Page Audit, scan history, sitemap seeding, and presets — and no longer limited to acg.aaa.com/meemic.com/meemicfoundation.org.
+- Fixed a dedup bug carried over from Site-Scanner: query-param variants of the same page (tracking params like `utm_source`, `gclid`, etc.) were being crawled and reported as separate pages in 5 of the 7 scanners. All 7 now canonicalize page identity the same way (already proven in the Spell Check/Word Search scanners) before keying crawl dedup and findings.
+- Added Console Error Capture: live JS error/warning capture on a tab of your choosing, with pattern-matched fix recommendations (load-order issues, null/undefined access, CORS, CSP, unhandled rejections, Tealium/jQuery-specific hints, and more).
 
 ## v1.98
 - Rewrote Site Inspector's scanning logic as a direct port of the proven Tealium Site QA Scanner (`ACG/Tealium/Site Scanner.js`) instead of the ad hoc scanner it shipped with in v1.95/v1.96: real lower-environment pattern matching, image candidate collection (including srcset/lazy attrs/meta/CSS backgrounds), the real spell dictionary and misspelling list, and a new Word Search tool. The Tealium script's own ACG state/region cookie switcher was intentionally left out — it would duplicate and conflict with this extension's own state-keeper.js/state-cookie-guard.js mechanism, which is more robust (drives the real zip-lookup flow instead of just writing cookies).

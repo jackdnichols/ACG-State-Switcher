@@ -52,7 +52,7 @@
   // ---- State ----
   const STATE = {
     env: AUTHOR_HOST_TO_ENV[host] || "production",
-    mode: "selector",     
+    mode: "free",
     anchor: "#env-labels",
     corner: "top-left",
     offX: 0,
@@ -177,7 +177,9 @@
         } else if (hostM === "selector" || hostM === "corner") {
           STATE.mode = hostM;
         } else {
-          STATE.mode = "selector";
+          // Never configured for this host: default to Free (drag anywhere,
+          // auto-saves per URL) — the mode almost everyone ends up using.
+          STATE.mode = "free";
         }
       }
 

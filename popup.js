@@ -3647,20 +3647,27 @@ document.getElementById('envRow')?.addEventListener('click',(e)=>{const a=e.targ
 document.querySelectorAll('[data-company]').forEach(link=>{link.addEventListener('click',(e)=>{e.preventDefault();if(!currentEnv||link.classList.contains('disabled'))return;const company=link.getAttribute('data-company');const target=urls?.[company]?.[currentEnv];if(target)chrome.tabs.create({url:target});});});
 document.getElementById('authorLink')?.addEventListener('click',(e)=>{e.preventDefault();if(!currentEnv||e.currentTarget.classList.contains('disabled'))return;const target=authorUrls[currentEnv];if(target)chrome.tabs.create({url:target});});
 document.getElementById('openSiteInspector')?.addEventListener('click', async () => {
-  // Prefill Site Inspector's Start URL with the domain of the tab it was
-  // opened from, so a tester on meemic.com doesn't land on a scanner still
-  // pointed at acg.aaa.com by default.
+  // Prefill Site Scanner's Start URL with the origin of the tab it was
+  // opened from — Site Scanner isn't domain-scoped, so this works for
+  // whatever site is active, not just acg.aaa.com/meemic.com.
   let startUrl = "";
+  let activeTabId = null;
   try {
     const tab = await getActiveTab();
-    if (tab?.url && isAllowedHost(tab.url)) {
+    activeTabId = tab?.id ?? null;
+    if (tab?.url && /^https?:\/\//i.test(tab.url)) {
       startUrl = new URL(tab.url).origin + "/";
     }
-  } catch { /* fall back to Site Inspector's own default */ }
+  } catch { /* fall back to Site Scanner's own default */ }
 
-  const target = startUrl
-    ? `${chrome.runtime.getURL('site-inspector.html')}?start=${encodeURIComponent(startUrl)}`
-    : chrome.runtime.getURL('site-inspector.html');
+  const params = new URLSearchParams();
+  if (startUrl) params.set('start', startUrl);
+  if (activeTabId != null) params.set('tabId', String(activeTabId));
+
+  const query = params.toString();
+  const target = query
+    ? `${chrome.runtime.getURL('site-scanner.html')}?${query}`
+    : chrome.runtime.getURL('site-scanner.html');
   chrome.tabs.create({ url: target });
 });
 
@@ -3717,7 +3724,7 @@ async function initBadgeUiFromStorage(activeTab) {
     const modeHere = (modeByUrl?.[host] || {})?.[urlKey];
     const mode = (modeHere === "free" || modeHere === "selector" || modeHere === "corner")
       ? modeHere
-      : (hostMode?.[host] || "selector");
+      : (hostMode?.[host] || "free");
 
     // Set radio
     document.querySelectorAll('input[name="badgeMode"]').forEach(r => {
