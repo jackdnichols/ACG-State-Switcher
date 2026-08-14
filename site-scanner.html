@@ -468,14 +468,155 @@
   </div>
 
   <div class="tabs">
+    <button id="tabSpellBtn" class="tab-btn">Spell Check</button>
+    <button id="tabImagesBtn" class="tab-btn">Missing Images</button>
     <button id="tabLowerBtn" class="tab-btn active">Lower Env Links</button>
     <button id="tabLinksBtn" class="tab-btn">Broken Links</button>
-    <button id="tabImagesBtn" class="tab-btn">Missing Images</button>
     <button id="tabMixedBtn" class="tab-btn">Mixed Content</button>
-    <button id="tabSpellBtn" class="tab-btn">Spell Check</button>
+    <button id="tabConsoleBtn" class="tab-btn">Console Errors</button>
     <button id="tabAuditBtn" class="tab-btn">Page Audit</button>
     <button id="tabWordBtn" class="tab-btn">Word Search</button>
-    <button id="tabConsoleBtn" class="tab-btn">Console Errors</button>
+  </div>
+
+  <!-- ============ Spell Checker ============ -->
+  <div id="spellPanel" class="tab-panel">
+    <div class="card">
+      <div class="card-body">
+        <div class="field">
+          <label for="spellStart">Start URL</label>
+          <input id="spellStart" type="text" placeholder="https://example.com/" />
+          <div class="help">Any http(s) URL. Crawl stays on this origin.</div>
+        </div>
+        <div class="field">
+          <label for="spellIgnoreWords">Approved / ignored words</label>
+          <textarea id="spellIgnoreWords"></textarea>
+          <div class="help">One word per line. Use for brand terms, product names, acronyms, locations, and intentional copy the scanner should not report.</div>
+        </div>
+        <details class="more-options">
+          <summary>Advanced options</summary>
+          <div class="more-options-body">
+            <div class="grid-2">
+              <div class="field">
+                <label for="spellMinLength">Minimum word length</label>
+                <input id="spellMinLength" type="number" min="2" max="20" step="1" value="4" />
+              </div>
+              <div class="field">
+                <label for="spellMaxFindings">Max spell findings</label>
+                <input id="spellMaxFindings" type="number" min="25" max="5000" step="25" value="300" />
+              </div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="spellFlagUnknown" />
+              <div><strong>Also flag unknown words as review candidates</strong><div class="sub">Browser-only spell checking cannot use Chrome's private dictionary, so this mode is intentionally noisy.</div></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="spellMainContentOnly" checked />
+              <div><strong>Prefer main article/content text when available</strong></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="spellSkipDataText" checked />
+              <div><strong>Ignore JSON, keyword arrays, and data blobs</strong></div>
+            </div>
+            <div class="check-item" style="margin-bottom:0;">
+              <input type="checkbox" id="spellIncludeMetaText" checked />
+              <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
+            </div>
+          </div>
+        </details>
+        <div class="toolbar" style="margin-top:14px;">
+          <button id="spellScanBtn">Start spell check</button>
+          <button id="spellStopBtn" class="secondary">Stop spell check</button>
+          <button id="spellExportBtn" class="ghost">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="spellStatus" class="status">Ready</div>
+
+    <div class="section-title">Spell check summary</div>
+    <div class="summary-grid">
+      <div class="stat"><div class="k">Status</div><div class="v" id="spellSumStatus">Ready</div></div>
+      <div class="stat"><div class="k">Duration</div><div class="v" id="spellSumDuration">0s</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="spellSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="spellSumQueued">0</div></div>
+      <div class="stat"><div class="k">Words checked</div><div class="v" id="spellSumChecked">0</div></div>
+      <div class="stat"><div class="k">Findings</div><div class="v" id="spellSumFindings">0</div></div>
+      <div class="stat"><div class="k">New vs last run</div><div class="v" id="spellSumNew">0</div></div>
+      <div class="stat"><div class="k">Skipped</div><div class="v" id="spellSumSkipped">0</div></div>
+      <div class="stat"><div class="k">Errors</div><div class="v" id="spellSumErrors">0</div></div>
+    </div>
+
+    <div class="section-title">Spell check results</div>
+    <div id="spellResults" class="results"><div class="empty">No results yet.</div></div>
+
+    <details class="log-panel">
+      <summary class="log-head">Spell checker log</summary>
+      <div id="spellLog" class="log"></div>
+    </details>
+  </div>
+
+  <!-- ============ Missing Image Scanner ============ -->
+  <div id="imagesPanel" class="tab-panel">
+    <div class="card">
+      <div class="card-body">
+        <div class="field">
+          <label for="imageStart">Start URL</label>
+          <input id="imageStart" type="text" placeholder="https://example.com/" />
+          <div class="help">Any http(s) URL. Crawl stays on this origin.</div>
+        </div>
+        <details class="more-options">
+          <summary>Advanced options</summary>
+          <div class="more-options-body">
+            <div class="field">
+              <label for="imageIgnorePatterns">Ignore image URL patterns</label>
+              <textarea id="imageIgnorePatterns"></textarea>
+              <div class="help">Optional. One pattern per line. Matching image URLs are skipped.</div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="includeCssImages" checked />
+              <div><strong>Include inline CSS background images</strong></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="includeMetaImages" checked />
+              <div><strong>Include meta/link images</strong><div class="sub">og:image, twitter:image, icons, preload images.</div></div>
+            </div>
+            <div class="check-item" style="margin-bottom:0;">
+              <input type="checkbox" id="imageSkipRedirectedPages" checked />
+              <div><strong>Skip image checks on redirected page URLs</strong><div class="sub">Recommended: redirected pages are logged and skipped, while the final same-origin URL is queued back into the crawl when possible.</div></div>
+            </div>
+          </div>
+        </details>
+        <div class="toolbar" style="margin-top:14px;">
+          <button id="imageScanBtn">Start image scan</button>
+          <button id="imageStopBtn" class="secondary">Stop image scan</button>
+          <button id="imageExportBtn" class="ghost">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="imageStatus" class="status">Ready</div>
+
+    <div class="section-title">Image scan summary</div>
+    <div class="summary-grid">
+      <div class="stat"><div class="k">Status</div><div class="v" id="imageSumStatus">Ready</div></div>
+      <div class="stat"><div class="k">Duration</div><div class="v" id="imageSumDuration">0s</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="imageSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="imageSumQueued">0</div></div>
+      <div class="stat"><div class="k">Images checked</div><div class="v" id="imageSumChecked">0</div></div>
+      <div class="stat"><div class="k">Missing</div><div class="v" id="imageSumFindings">0</div></div>
+      <div class="stat"><div class="k">Redirects</div><div class="v" id="imageSumRedirected">0</div></div>
+      <div class="stat"><div class="k">New vs last run</div><div class="v" id="imageSumNew">0</div></div>
+      <div class="stat"><div class="k">Skipped</div><div class="v" id="imageSumSkipped">0</div></div>
+      <div class="stat"><div class="k">Errors</div><div class="v" id="imageSumErrors">0</div></div>
+    </div>
+
+    <div class="section-title">Missing image results</div>
+    <div id="imageResults" class="results"><div class="empty">No results yet.</div></div>
+
+    <details class="log-panel">
+      <summary class="log-head">Image scanner log</summary>
+      <div id="imageLog" class="log"></div>
+    </details>
   </div>
 
   <!-- ============ Lower Environment Link Scanner ============ -->
@@ -569,70 +710,6 @@
     </details>
   </div>
 
-  <!-- ============ Missing Image Scanner ============ -->
-  <div id="imagesPanel" class="tab-panel">
-    <div class="card">
-      <div class="card-body">
-        <div class="field">
-          <label for="imageStart">Start URL</label>
-          <input id="imageStart" type="text" placeholder="https://example.com/" />
-          <div class="help">Any http(s) URL. Crawl stays on this origin.</div>
-        </div>
-        <details class="more-options">
-          <summary>Advanced options</summary>
-          <div class="more-options-body">
-            <div class="field">
-              <label for="imageIgnorePatterns">Ignore image URL patterns</label>
-              <textarea id="imageIgnorePatterns"></textarea>
-              <div class="help">Optional. One pattern per line. Matching image URLs are skipped.</div>
-            </div>
-            <div class="check-item">
-              <input type="checkbox" id="includeCssImages" checked />
-              <div><strong>Include inline CSS background images</strong></div>
-            </div>
-            <div class="check-item">
-              <input type="checkbox" id="includeMetaImages" checked />
-              <div><strong>Include meta/link images</strong><div class="sub">og:image, twitter:image, icons, preload images.</div></div>
-            </div>
-            <div class="check-item" style="margin-bottom:0;">
-              <input type="checkbox" id="imageSkipRedirectedPages" checked />
-              <div><strong>Skip image checks on redirected page URLs</strong><div class="sub">Recommended: redirected pages are logged and skipped, while the final same-origin URL is queued back into the crawl when possible.</div></div>
-            </div>
-          </div>
-        </details>
-        <div class="toolbar" style="margin-top:14px;">
-          <button id="imageScanBtn">Start image scan</button>
-          <button id="imageStopBtn" class="secondary">Stop image scan</button>
-          <button id="imageExportBtn" class="ghost">Download CSV</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="imageStatus" class="status">Ready</div>
-
-    <div class="section-title">Image scan summary</div>
-    <div class="summary-grid">
-      <div class="stat"><div class="k">Status</div><div class="v" id="imageSumStatus">Ready</div></div>
-      <div class="stat"><div class="k">Duration</div><div class="v" id="imageSumDuration">0s</div></div>
-      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="imageSumPages">0</div></div>
-      <div class="stat"><div class="k">Queued</div><div class="v" id="imageSumQueued">0</div></div>
-      <div class="stat"><div class="k">Images checked</div><div class="v" id="imageSumChecked">0</div></div>
-      <div class="stat"><div class="k">Missing</div><div class="v" id="imageSumFindings">0</div></div>
-      <div class="stat"><div class="k">Redirects</div><div class="v" id="imageSumRedirected">0</div></div>
-      <div class="stat"><div class="k">New vs last run</div><div class="v" id="imageSumNew">0</div></div>
-      <div class="stat"><div class="k">Skipped</div><div class="v" id="imageSumSkipped">0</div></div>
-      <div class="stat"><div class="k">Errors</div><div class="v" id="imageSumErrors">0</div></div>
-    </div>
-
-    <div class="section-title">Missing image results</div>
-    <div id="imageResults" class="results"><div class="empty">No results yet.</div></div>
-
-    <details class="log-panel">
-      <summary class="log-head">Image scanner log</summary>
-      <div id="imageLog" class="log"></div>
-    </details>
-  </div>
-
   <!-- ============ Mixed Content Scanner ============ -->
   <div id="mixedPanel" class="tab-panel">
     <div class="card">
@@ -674,80 +751,65 @@
     </details>
   </div>
 
-  <!-- ============ Spell Checker ============ -->
-  <div id="spellPanel" class="tab-panel">
+  <!-- ============ Console Error Capture ============ -->
+  <div id="consolePanel" class="tab-panel">
     <div class="card">
       <div class="card-body">
-        <div class="field">
-          <label for="spellStart">Start URL</label>
-          <input id="spellStart" type="text" placeholder="https://example.com/" />
-          <div class="help">Any http(s) URL. Crawl stays on this origin.</div>
-        </div>
-        <div class="field">
-          <label for="spellIgnoreWords">Approved / ignored words</label>
-          <textarea id="spellIgnoreWords"></textarea>
-          <div class="help">One word per line. Use for brand terms, product names, acronyms, locations, and intentional copy the scanner should not report.</div>
-        </div>
-        <details class="more-options">
-          <summary>Advanced options</summary>
-          <div class="more-options-body">
-            <div class="grid-2">
-              <div class="field">
-                <label for="spellMinLength">Minimum word length</label>
-                <input id="spellMinLength" type="number" min="2" max="20" step="1" value="4" />
-              </div>
-              <div class="field">
-                <label for="spellMaxFindings">Max spell findings</label>
-                <input id="spellMaxFindings" type="number" min="25" max="5000" step="25" value="300" />
-              </div>
-            </div>
-            <div class="check-item">
-              <input type="checkbox" id="spellFlagUnknown" />
-              <div><strong>Also flag unknown words as review candidates</strong><div class="sub">Browser-only spell checking cannot use Chrome's private dictionary, so this mode is intentionally noisy.</div></div>
-            </div>
-            <div class="check-item">
-              <input type="checkbox" id="spellMainContentOnly" checked />
-              <div><strong>Prefer main article/content text when available</strong></div>
-            </div>
-            <div class="check-item">
-              <input type="checkbox" id="spellSkipDataText" checked />
-              <div><strong>Ignore JSON, keyword arrays, and data blobs</strong></div>
-            </div>
-            <div class="check-item" style="margin-bottom:0;">
-              <input type="checkbox" id="spellIncludeMetaText" checked />
-              <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
-            </div>
+        <div class="note" style="margin-top:0;">A scan, not a live monitor: drives one of your open tabs through same-origin pages one at a time (reload, then watch for a fixed window), catching uncaught exceptions, unhandled promise rejections, and console.error/console.warn calls — including page-init/tag-manager errors, since the hook is in place before each page's own scripts run. Your browser tab will visibly navigate through the site while this runs; don't use it for anything else until the scan finishes or you click Stop. It does not catch browser-native "failed to load resource" network log lines (use Broken Links/Missing Images for those) or anything logged inside a cross-origin iframe (chat widgets, ad tags, etc. — those have their own isolated console). The same message repeating back-to-back on one page collapses into one entry with a repeat count.</div>
+        <div class="field" style="margin-top:14px;">
+          <label for="consoleTabSelect">Target tab</label>
+          <div class="grid-2">
+            <select id="consoleTabSelect"></select>
+            <button id="consoleRefreshTabsBtn" class="ghost" type="button">Refresh tab list</button>
           </div>
-        </details>
+          <div class="help">The tab the scan will drive. Defaults to the tab this scanner was opened from, if any.</div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="consoleMaxPages">Max pages</label>
+            <input id="consoleMaxPages" type="number" min="1" max="300" step="1" value="20" />
+            <div class="help">Each page takes at least "Seconds per page" to scan, so keep this modest — 20 pages at 10s each is already ~3-4 minutes.</div>
+          </div>
+          <div class="field">
+            <label for="consoleSecondsPerPage">Seconds per page</label>
+            <input id="consoleSecondsPerPage" type="number" min="3" max="60" step="1" value="10" />
+            <div class="help">How long to watch each page after it loads before moving to the next.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="consoleMaxFindings">Max captured events</label>
+          <input id="consoleMaxFindings" type="number" min="25" max="5000" step="25" value="300" />
+          <div class="help">Scan auto-stops once this many distinct events are captured, so a noisy site can't grow the results list without bound. Repeats of the same message don't count against this.</div>
+        </div>
         <div class="toolbar" style="margin-top:14px;">
-          <button id="spellScanBtn">Start spell check</button>
-          <button id="spellStopBtn" class="secondary">Stop spell check</button>
-          <button id="spellExportBtn" class="ghost">Download CSV</button>
+          <button id="consoleStartBtn">Start console scan</button>
+          <button id="consoleStopBtn" class="secondary">Stop scan</button>
+          <button id="consoleClearBtn" class="secondary">Clear results</button>
+          <button id="consoleExportBtn" class="ghost">Download CSV</button>
         </div>
       </div>
     </div>
 
-    <div id="spellStatus" class="status">Ready</div>
+    <div id="consoleStatus" class="status">Ready</div>
 
-    <div class="section-title">Spell check summary</div>
+    <div class="section-title">Console scan summary</div>
     <div class="summary-grid">
-      <div class="stat"><div class="k">Status</div><div class="v" id="spellSumStatus">Ready</div></div>
-      <div class="stat"><div class="k">Duration</div><div class="v" id="spellSumDuration">0s</div></div>
-      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="spellSumPages">0</div></div>
-      <div class="stat"><div class="k">Queued</div><div class="v" id="spellSumQueued">0</div></div>
-      <div class="stat"><div class="k">Words checked</div><div class="v" id="spellSumChecked">0</div></div>
-      <div class="stat"><div class="k">Findings</div><div class="v" id="spellSumFindings">0</div></div>
-      <div class="stat"><div class="k">New vs last run</div><div class="v" id="spellSumNew">0</div></div>
-      <div class="stat"><div class="k">Skipped</div><div class="v" id="spellSumSkipped">0</div></div>
-      <div class="stat"><div class="k">Errors</div><div class="v" id="spellSumErrors">0</div></div>
+      <div class="stat"><div class="k">Status</div><div class="v" id="consoleSumStatus">Ready</div></div>
+      <div class="stat"><div class="k">Duration</div><div class="v" id="consoleSumDuration">0s</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="consoleSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="consoleSumQueued">0</div></div>
+      <div class="stat"><div class="k">Total events</div><div class="v" id="consoleSumEvents">0</div></div>
+      <div class="stat"><div class="k">Exceptions</div><div class="v" id="consoleSumErrors">0</div></div>
+      <div class="stat"><div class="k">Warnings</div><div class="v" id="consoleSumWarnings">0</div></div>
+      <div class="stat"><div class="k">Unhandled rejections</div><div class="v" id="consoleSumRejections">0</div></div>
     </div>
 
-    <div class="section-title">Spell check results</div>
-    <div id="spellResults" class="results"><div class="empty">No results yet.</div></div>
+    <div class="section-title">Captured events &amp; recommendations</div>
+    <div id="consoleResults" class="results"><div class="empty">No events captured yet.</div></div>
 
     <details class="log-panel">
-      <summary class="log-head">Spell checker log</summary>
-      <div id="spellLog" class="log"></div>
+      <summary class="log-head">Console scan log</summary>
+      <div id="consoleLog" class="log"></div>
     </details>
   </div>
 
@@ -879,67 +941,6 @@
     </details>
   </div>
 
-  <!-- ============ Console Error Capture ============ -->
-  <div id="consolePanel" class="tab-panel">
-    <div class="card">
-      <div class="card-body">
-        <div class="note" style="margin-top:0;">A scan, not a live monitor: drives one of your open tabs through same-origin pages one at a time (reload, then watch for a fixed window), catching uncaught exceptions, unhandled promise rejections, and console.error/console.warn calls — including page-init/tag-manager errors, since the hook is in place before each page's own scripts run. Your browser tab will visibly navigate through the site while this runs; don't use it for anything else until the scan finishes or you click Stop. It does not catch browser-native "failed to load resource" network log lines (use Broken Links/Missing Images for those) or anything logged inside a cross-origin iframe (chat widgets, ad tags, etc. — those have their own isolated console). The same message repeating back-to-back on one page collapses into one entry with a repeat count.</div>
-        <div class="field" style="margin-top:14px;">
-          <label for="consoleTabSelect">Target tab</label>
-          <div class="grid-2">
-            <select id="consoleTabSelect"></select>
-            <button id="consoleRefreshTabsBtn" class="ghost" type="button">Refresh tab list</button>
-          </div>
-          <div class="help">The tab the scan will drive. Defaults to the tab this scanner was opened from, if any.</div>
-        </div>
-        <div class="grid-2">
-          <div class="field">
-            <label for="consoleMaxPages">Max pages</label>
-            <input id="consoleMaxPages" type="number" min="1" max="300" step="1" value="20" />
-            <div class="help">Each page takes at least "Seconds per page" to scan, so keep this modest — 20 pages at 10s each is already ~3-4 minutes.</div>
-          </div>
-          <div class="field">
-            <label for="consoleSecondsPerPage">Seconds per page</label>
-            <input id="consoleSecondsPerPage" type="number" min="3" max="60" step="1" value="10" />
-            <div class="help">How long to watch each page after it loads before moving to the next.</div>
-          </div>
-        </div>
-        <div class="field">
-          <label for="consoleMaxFindings">Max captured events</label>
-          <input id="consoleMaxFindings" type="number" min="25" max="5000" step="25" value="300" />
-          <div class="help">Scan auto-stops once this many distinct events are captured, so a noisy site can't grow the results list without bound. Repeats of the same message don't count against this.</div>
-        </div>
-        <div class="toolbar" style="margin-top:14px;">
-          <button id="consoleStartBtn">Start console scan</button>
-          <button id="consoleStopBtn" class="secondary">Stop scan</button>
-          <button id="consoleClearBtn" class="secondary">Clear results</button>
-          <button id="consoleExportBtn" class="ghost">Download CSV</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="consoleStatus" class="status">Ready</div>
-
-    <div class="section-title">Console scan summary</div>
-    <div class="summary-grid">
-      <div class="stat"><div class="k">Status</div><div class="v" id="consoleSumStatus">Ready</div></div>
-      <div class="stat"><div class="k">Duration</div><div class="v" id="consoleSumDuration">0s</div></div>
-      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="consoleSumPages">0</div></div>
-      <div class="stat"><div class="k">Queued</div><div class="v" id="consoleSumQueued">0</div></div>
-      <div class="stat"><div class="k">Total events</div><div class="v" id="consoleSumEvents">0</div></div>
-      <div class="stat"><div class="k">Exceptions</div><div class="v" id="consoleSumErrors">0</div></div>
-      <div class="stat"><div class="k">Warnings</div><div class="v" id="consoleSumWarnings">0</div></div>
-      <div class="stat"><div class="k">Unhandled rejections</div><div class="v" id="consoleSumRejections">0</div></div>
-    </div>
-
-    <div class="section-title">Captured events &amp; recommendations</div>
-    <div id="consoleResults" class="results"><div class="empty">No events captured yet.</div></div>
-
-    <details class="log-panel">
-      <summary class="log-head">Console scan log</summary>
-      <div id="consoleLog" class="log"></div>
-    </details>
-  </div>
 
 </div>
 
