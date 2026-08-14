@@ -353,8 +353,19 @@
     vertical-align: middle;
   }
 
-  .log-panel { margin-top: 14px; }
-  .log-head { background: #0f172a; color: #e5e7eb; padding: 8px 14px; font-weight: 700; font-size: 12px; border-radius: 12px 12px 0 0; }
+  .log-panel { margin-top: 14px; border-radius: 12px; overflow: hidden; }
+  .log-head {
+    background: #0f172a;
+    color: #e5e7eb;
+    padding: 8px 14px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .log-head::-webkit-details-marker { display: none; }
+  .log-head::before { content: "▸ "; }
+  .log-panel[open] .log-head::before { content: "▾ "; }
   .log {
     background: #020617;
     color: #e5e7eb;
@@ -365,8 +376,26 @@
     white-space: pre-wrap;
     font-family: Consolas, monospace;
     font-size: 12px;
-    border-radius: 0 0 12px 12px;
   }
+
+  /* Collapsible secondary/advanced sections — hidden by default so the
+     primary URL-in, results-out flow is what you see on first look. */
+  .more-options {
+    margin-top: 14px;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  .more-options > summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--blue-text);
+    list-style: none;
+  }
+  .more-options > summary::-webkit-details-marker { display: none; }
+  .more-options > summary::before { content: "▸ "; }
+  .more-options[open] > summary::before { content: "▾ "; }
+  .more-options-body { margin-top: 12px; }
 
   @media (max-width: 720px) {
     body { padding: 12px; }
@@ -406,30 +435,35 @@
       </div>
       <div class="help" style="margin-top:14px;">Enter a Start URL on each tab below, or reopen this scanner from the toolbar icon while on the site you want to scan to prefill it automatically.</div>
 
-      <div class="check-item" style="margin-top:14px;">
-        <input type="checkbox" id="seedFromSitemap" />
-        <div><strong>Seed crawl queue from sitemap.xml</strong><div class="sub">When a scan starts, also fetch &lt;origin&gt;/sitemap.xml (and nested sitemap indexes, up to a cap) and add same-origin URLs to that scan's queue.</div></div>
-      </div>
-
-      <div class="field" style="margin-top:14px; margin-bottom:0;">
-        <label for="presetName">Scan presets for this origin</label>
-        <div class="grid-3">
-          <input id="presetName" type="text" placeholder="Preset name" />
-          <select id="presetSelect"><option value="">No saved presets</option></select>
-          <div class="toolbar">
-            <button id="presetSaveBtn" class="ghost">Save</button>
-            <button id="presetLoadBtn" class="ghost">Load</button>
-            <button id="presetDeleteBtn" class="secondary">Delete</button>
+      <details class="more-options">
+        <summary>Sitemap seeding, presets &amp; scan history</summary>
+        <div class="more-options-body">
+          <div class="check-item">
+            <input type="checkbox" id="seedFromSitemap" />
+            <div><strong>Seed crawl queue from sitemap.xml</strong><div class="sub">When a scan starts, also fetch &lt;origin&gt;/sitemap.xml (and nested sitemap indexes, up to a cap) and add same-origin URLs to that scan's queue.</div></div>
           </div>
-        </div>
-        <div class="help">Saves every pattern/ignore/term list and checkbox on this page, keyed to the origin of the Lower Env Links Start URL. Loading a preset does not change Start URLs.</div>
-      </div>
 
-      <div class="toolbar" style="margin-top:14px;">
-        <button id="exportAllBtn" class="ghost">Download all results (JSON)</button>
-        <button id="clearHistoryBtn" class="secondary">Clear saved scan history for this origin</button>
-      </div>
-      <div class="help">Each scan remembers its findings from the last run on a given origin and flags which findings are new. Clearing history resets that comparison.</div>
+          <div class="field" style="margin-top:14px; margin-bottom:0;">
+            <label for="presetName">Scan presets for this origin</label>
+            <div class="grid-3">
+              <input id="presetName" type="text" placeholder="Preset name" />
+              <select id="presetSelect"><option value="">No saved presets</option></select>
+              <div class="toolbar">
+                <button id="presetSaveBtn" class="ghost">Save</button>
+                <button id="presetLoadBtn" class="ghost">Load</button>
+                <button id="presetDeleteBtn" class="secondary">Delete</button>
+              </div>
+            </div>
+            <div class="help">Saves every pattern/ignore/term list and checkbox on this page, keyed to the origin of the Lower Env Links Start URL. Loading a preset does not change Start URLs.</div>
+          </div>
+
+          <div class="toolbar" style="margin-top:14px;">
+            <button id="exportAllBtn" class="ghost">Download all results (JSON)</button>
+            <button id="clearHistoryBtn" class="secondary">Clear saved scan history for this origin</button>
+          </div>
+          <div class="help">Each scan remembers its findings from the last run on a given origin and flags which findings are new. Clearing history resets that comparison.</div>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -484,10 +518,10 @@
     <div class="section-title">Lower environment link results</div>
     <div id="lowerResults" class="results"><div class="empty">No results yet.</div></div>
 
-    <div class="log-panel">
-      <div class="log-head">Link scanner log</div>
+    <details class="log-panel">
+      <summary class="log-head">Link scanner log</summary>
       <div id="lowerLog" class="log"></div>
-    </div>
+    </details>
   </div>
 
   <!-- ============ Broken Link Scanner ============ -->
@@ -529,10 +563,10 @@
     <div class="section-title">Broken link results</div>
     <div id="linkResults" class="results"><div class="empty">No results yet.</div></div>
 
-    <div class="log-panel">
-      <div class="log-head">Broken link scanner log</div>
+    <details class="log-panel">
+      <summary class="log-head">Broken link scanner log</summary>
       <div id="linkLog" class="log"></div>
-    </div>
+    </details>
   </div>
 
   <!-- ============ Missing Image Scanner ============ -->
@@ -544,23 +578,28 @@
           <input id="imageStart" type="text" placeholder="https://example.com/" />
           <div class="help">Any http(s) URL. Crawl stays on this origin.</div>
         </div>
-        <div class="field">
-          <label for="imageIgnorePatterns">Ignore image URL patterns</label>
-          <textarea id="imageIgnorePatterns"></textarea>
-          <div class="help">Optional. One pattern per line. Matching image URLs are skipped.</div>
-        </div>
-        <div class="check-item">
-          <input type="checkbox" id="includeCssImages" checked />
-          <div><strong>Include inline CSS background images</strong></div>
-        </div>
-        <div class="check-item">
-          <input type="checkbox" id="includeMetaImages" checked />
-          <div><strong>Include meta/link images</strong><div class="sub">og:image, twitter:image, icons, preload images.</div></div>
-        </div>
-        <div class="check-item" style="margin-bottom:0;">
-          <input type="checkbox" id="imageSkipRedirectedPages" checked />
-          <div><strong>Skip image checks on redirected page URLs</strong><div class="sub">Recommended: redirected pages are logged and skipped, while the final same-origin URL is queued back into the crawl when possible.</div></div>
-        </div>
+        <details class="more-options">
+          <summary>Advanced options</summary>
+          <div class="more-options-body">
+            <div class="field">
+              <label for="imageIgnorePatterns">Ignore image URL patterns</label>
+              <textarea id="imageIgnorePatterns"></textarea>
+              <div class="help">Optional. One pattern per line. Matching image URLs are skipped.</div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="includeCssImages" checked />
+              <div><strong>Include inline CSS background images</strong></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="includeMetaImages" checked />
+              <div><strong>Include meta/link images</strong><div class="sub">og:image, twitter:image, icons, preload images.</div></div>
+            </div>
+            <div class="check-item" style="margin-bottom:0;">
+              <input type="checkbox" id="imageSkipRedirectedPages" checked />
+              <div><strong>Skip image checks on redirected page URLs</strong><div class="sub">Recommended: redirected pages are logged and skipped, while the final same-origin URL is queued back into the crawl when possible.</div></div>
+            </div>
+          </div>
+        </details>
         <div class="toolbar" style="margin-top:14px;">
           <button id="imageScanBtn">Start image scan</button>
           <button id="imageStopBtn" class="secondary">Stop image scan</button>
@@ -588,10 +627,10 @@
     <div class="section-title">Missing image results</div>
     <div id="imageResults" class="results"><div class="empty">No results yet.</div></div>
 
-    <div class="log-panel">
-      <div class="log-head">Image scanner log</div>
+    <details class="log-panel">
+      <summary class="log-head">Image scanner log</summary>
       <div id="imageLog" class="log"></div>
-    </div>
+    </details>
   </div>
 
   <!-- ============ Mixed Content Scanner ============ -->
@@ -629,10 +668,10 @@
     <div class="section-title">Mixed content results</div>
     <div id="mixedResults" class="results"><div class="empty">No results yet.</div></div>
 
-    <div class="log-panel">
-      <div class="log-head">Mixed content scanner log</div>
+    <details class="log-panel">
+      <summary class="log-head">Mixed content scanner log</summary>
       <div id="mixedLog" class="log"></div>
-    </div>
+    </details>
   </div>
 
   <!-- ============ Spell Checker ============ -->
@@ -649,32 +688,37 @@
           <textarea id="spellIgnoreWords"></textarea>
           <div class="help">One word per line. Use for brand terms, product names, acronyms, locations, and intentional copy the scanner should not report.</div>
         </div>
-        <div class="grid-2">
-          <div class="field">
-            <label for="spellMinLength">Minimum word length</label>
-            <input id="spellMinLength" type="number" min="2" max="20" step="1" value="4" />
+        <details class="more-options">
+          <summary>Advanced options</summary>
+          <div class="more-options-body">
+            <div class="grid-2">
+              <div class="field">
+                <label for="spellMinLength">Minimum word length</label>
+                <input id="spellMinLength" type="number" min="2" max="20" step="1" value="4" />
+              </div>
+              <div class="field">
+                <label for="spellMaxFindings">Max spell findings</label>
+                <input id="spellMaxFindings" type="number" min="25" max="5000" step="25" value="300" />
+              </div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="spellFlagUnknown" />
+              <div><strong>Also flag unknown words as review candidates</strong><div class="sub">Browser-only spell checking cannot use Chrome's private dictionary, so this mode is intentionally noisy.</div></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="spellMainContentOnly" checked />
+              <div><strong>Prefer main article/content text when available</strong></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="spellSkipDataText" checked />
+              <div><strong>Ignore JSON, keyword arrays, and data blobs</strong></div>
+            </div>
+            <div class="check-item" style="margin-bottom:0;">
+              <input type="checkbox" id="spellIncludeMetaText" checked />
+              <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
+            </div>
           </div>
-          <div class="field">
-            <label for="spellMaxFindings">Max spell findings</label>
-            <input id="spellMaxFindings" type="number" min="25" max="5000" step="25" value="300" />
-          </div>
-        </div>
-        <div class="check-item">
-          <input type="checkbox" id="spellFlagUnknown" />
-          <div><strong>Also flag unknown words as review candidates</strong><div class="sub">Browser-only spell checking cannot use Chrome's private dictionary, so this mode is intentionally noisy.</div></div>
-        </div>
-        <div class="check-item">
-          <input type="checkbox" id="spellMainContentOnly" checked />
-          <div><strong>Prefer main article/content text when available</strong></div>
-        </div>
-        <div class="check-item">
-          <input type="checkbox" id="spellSkipDataText" checked />
-          <div><strong>Ignore JSON, keyword arrays, and data blobs</strong></div>
-        </div>
-        <div class="check-item" style="margin-bottom:0;">
-          <input type="checkbox" id="spellIncludeMetaText" checked />
-          <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
-        </div>
+        </details>
         <div class="toolbar" style="margin-top:14px;">
           <button id="spellScanBtn">Start spell check</button>
           <button id="spellStopBtn" class="secondary">Stop spell check</button>
@@ -701,10 +745,10 @@
     <div class="section-title">Spell check results</div>
     <div id="spellResults" class="results"><div class="empty">No results yet.</div></div>
 
-    <div class="log-panel">
-      <div class="log-head">Spell checker log</div>
+    <details class="log-panel">
+      <summary class="log-head">Spell checker log</summary>
       <div id="spellLog" class="log"></div>
-    </div>
+    </details>
   </div>
 
   <!-- ============ Page Audit ============ -->
@@ -758,10 +802,10 @@
     <div class="section-title">Page audit results</div>
     <div id="auditResults" class="results"><div class="empty">No results yet.</div></div>
 
-    <div class="log-panel">
-      <div class="log-head">Page audit log</div>
+    <details class="log-panel">
+      <summary class="log-head">Page audit log</summary>
       <div id="auditLog" class="log"></div>
-    </div>
+    </details>
   </div>
 
   <!-- ============ Word Search ============ -->
@@ -778,26 +822,31 @@
           <textarea id="wordTerms"></textarea>
           <div class="help">One word or phrase per line. Searches visible page copy and reports page/source/context matches.</div>
         </div>
-        <div class="field">
-          <label for="wordMaxFindings">Max word search findings</label>
-          <input id="wordMaxFindings" type="number" min="25" max="5000" step="25" value="500" />
-        </div>
-        <div class="check-item">
-          <input type="checkbox" id="wordCaseSensitive" />
-          <div><strong>Case-sensitive search</strong></div>
-        </div>
-        <div class="check-item">
-          <input type="checkbox" id="wordWholeWord" checked />
-          <div><strong>Match whole words for single-word searches</strong></div>
-        </div>
-        <div class="check-item">
-          <input type="checkbox" id="wordMainContentOnly" checked />
-          <div><strong>Prefer main article/content text when available</strong></div>
-        </div>
-        <div class="check-item" style="margin-bottom:0;">
-          <input type="checkbox" id="wordIncludeMetaText" checked />
-          <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
-        </div>
+        <details class="more-options">
+          <summary>Advanced options</summary>
+          <div class="more-options-body">
+            <div class="field">
+              <label for="wordMaxFindings">Max word search findings</label>
+              <input id="wordMaxFindings" type="number" min="25" max="5000" step="25" value="500" />
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="wordCaseSensitive" />
+              <div><strong>Case-sensitive search</strong></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="wordWholeWord" checked />
+              <div><strong>Match whole words for single-word searches</strong></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="wordMainContentOnly" checked />
+              <div><strong>Prefer main article/content text when available</strong></div>
+            </div>
+            <div class="check-item" style="margin-bottom:0;">
+              <input type="checkbox" id="wordIncludeMetaText" checked />
+              <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
+            </div>
+          </div>
+        </details>
         <div class="toolbar" style="margin-top:14px;">
           <button id="wordScanBtn">Start word search</button>
           <button id="wordStopBtn" class="secondary">Stop word search</button>
@@ -824,10 +873,10 @@
     <div class="section-title">Word search results</div>
     <div id="wordResults" class="results"><div class="empty">No results yet.</div></div>
 
-    <div class="log-panel">
-      <div class="log-head">Word search log</div>
+    <details class="log-panel">
+      <summary class="log-head">Word search log</summary>
       <div id="wordLog" class="log"></div>
-    </div>
+    </details>
   </div>
 
   <!-- ============ Console Error Capture ============ -->
@@ -886,10 +935,10 @@
     <div class="section-title">Captured events &amp; recommendations</div>
     <div id="consoleResults" class="results"><div class="empty">No events captured yet.</div></div>
 
-    <div class="log-panel">
-      <div class="log-head">Console scan log</div>
+    <details class="log-panel">
+      <summary class="log-head">Console scan log</summary>
       <div id="consoleLog" class="log"></div>
-    </div>
+    </details>
   </div>
 
 </div>
