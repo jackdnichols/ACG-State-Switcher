@@ -2956,11 +2956,27 @@
       test: function (msg) { return /404|failed to load resource/i.test(msg); },
       title: "Resource failed to load",
       recommendation: "A referenced script/stylesheet/image returned an error status. Verify the URL is correct and the resource actually exists at that path — the Broken Links / Missing Images scanner tabs in this tool can confirm this across the whole site."
+    },
+    {
+      test: function (msg) { return /invoca/i.test(msg); },
+      title: "Invoca call-tracking tag missing a required parameter",
+      recommendation: "Invoca (dynamic number insertion / call tracking) tried to run but a required parameter wasn't populated — e.g. \"no PPCPN\" means it didn't have a pre-populated caller phone number to work with. Check the Invoca tag's setup in Tealium iQ: confirm whatever data layer variable, URL param, or cookie it expects for that parameter is actually being set on this page before the tag fires. Until it is, calls from this page load aren't being tracked/attributed by Invoca — the rest of the page is unaffected."
+    },
+    {
+      test: function (msg) { return /pinterest/i.test(msg); },
+      title: "Pinterest tag fired more than once",
+      recommendation: "The Pinterest conversion tag's load command ran twice with different tag IDs. Usually means the Pinterest snippet is being injected from more than one place (a hardcoded snippet plus a Tealium/GTM tag, or a client-side route change re-firing it without checking if it's already loaded). Check for duplicate Pinterest tag placements in Tealium iQ or the page template and dedupe them."
     }
   ];
 
+  var CONSOLE_FALLBACK_RULE = {
+    title: "No specific pattern matched",
+    recommendation: "This message didn't match any of the known patterns above. Read the text and stack trace for the originating script/line — note whether it names a specific vendor tag, library, or your own code, since that points at where to start. If you see the same message recur across scans, it's worth adding a dedicated rule for it."
+  };
+
   function matchConsoleRules(message) {
-    return CONSOLE_ERROR_RULES.filter(function (rule) { return rule.test(message); });
+    var matches = CONSOLE_ERROR_RULES.filter(function (rule) { return rule.test(message); });
+    return matches.length ? matches : [CONSOLE_FALLBACK_RULE];
   }
 
   var consoleState = createScanState("console");
