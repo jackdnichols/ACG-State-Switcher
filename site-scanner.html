@@ -469,13 +469,13 @@
 
   <div class="tabs">
     <button id="tabSpellBtn" class="tab-btn">Spell Check</button>
+    <button id="tabWordBtn" class="tab-btn">Word Search</button>
     <button id="tabImagesBtn" class="tab-btn">Missing Images</button>
     <button id="tabLowerBtn" class="tab-btn active">Lower Env Links</button>
     <button id="tabLinksBtn" class="tab-btn">Broken Links</button>
     <button id="tabMixedBtn" class="tab-btn">Mixed Content</button>
     <button id="tabConsoleBtn" class="tab-btn">Console Errors</button>
     <button id="tabAuditBtn" class="tab-btn">Page Audit</button>
-    <button id="tabWordBtn" class="tab-btn">Word Search</button>
   </div>
 
   <!-- ============ Spell Checker ============ -->
@@ -552,6 +552,77 @@
     <details class="log-panel">
       <summary class="log-head">Spell checker log</summary>
       <div id="spellLog" class="log"></div>
+    </details>
+  </div>
+
+  <!-- ============ Word Search ============ -->
+  <div id="wordPanel" class="tab-panel">
+    <div class="card">
+      <div class="card-body">
+        <div class="field">
+          <label for="wordStart">Start URL</label>
+          <input id="wordStart" type="text" placeholder="https://example.com/" />
+          <div class="help">Any http(s) URL. Crawl stays on this origin.</div>
+        </div>
+        <div class="field">
+          <label for="wordTerms">Words / phrases to search</label>
+          <textarea id="wordTerms"></textarea>
+          <div class="help">One word or phrase per line. Searches visible page copy and reports page/source/context matches.</div>
+        </div>
+        <details class="more-options">
+          <summary>Advanced options</summary>
+          <div class="more-options-body">
+            <div class="field">
+              <label for="wordMaxFindings">Max word search findings</label>
+              <input id="wordMaxFindings" type="number" min="25" max="5000" step="25" value="500" />
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="wordCaseSensitive" />
+              <div><strong>Case-sensitive search</strong></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="wordWholeWord" checked />
+              <div><strong>Match whole words for single-word searches</strong></div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="wordMainContentOnly" checked />
+              <div><strong>Prefer main article/content text when available</strong></div>
+            </div>
+            <div class="check-item" style="margin-bottom:0;">
+              <input type="checkbox" id="wordIncludeMetaText" checked />
+              <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
+            </div>
+          </div>
+        </details>
+        <div class="toolbar" style="margin-top:14px;">
+          <button id="wordScanBtn">Start word search</button>
+          <button id="wordStopBtn" class="secondary">Stop word search</button>
+          <button id="wordExportBtn" class="ghost">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="wordStatus" class="status">Ready</div>
+
+    <div class="section-title">Word search summary</div>
+    <div class="summary-grid">
+      <div class="stat"><div class="k">Status</div><div class="v" id="wordSumStatus">Ready</div></div>
+      <div class="stat"><div class="k">Duration</div><div class="v" id="wordSumDuration">0s</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="wordSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="wordSumQueued">0</div></div>
+      <div class="stat"><div class="k">Term checks</div><div class="v" id="wordSumChecked">0</div></div>
+      <div class="stat"><div class="k">Matches</div><div class="v" id="wordSumFindings">0</div></div>
+      <div class="stat"><div class="k">New vs last run</div><div class="v" id="wordSumNew">0</div></div>
+      <div class="stat"><div class="k">Skipped</div><div class="v" id="wordSumSkipped">0</div></div>
+      <div class="stat"><div class="k">Errors</div><div class="v" id="wordSumErrors">0</div></div>
+    </div>
+
+    <div class="section-title">Word search results</div>
+    <div id="wordResults" class="results"><div class="empty">No results yet.</div></div>
+
+    <details class="log-panel">
+      <summary class="log-head">Word search log</summary>
+      <div id="wordLog" class="log"></div>
     </details>
   </div>
 
@@ -867,77 +938,6 @@
     <details class="log-panel">
       <summary class="log-head">Page audit log</summary>
       <div id="auditLog" class="log"></div>
-    </details>
-  </div>
-
-  <!-- ============ Word Search ============ -->
-  <div id="wordPanel" class="tab-panel">
-    <div class="card">
-      <div class="card-body">
-        <div class="field">
-          <label for="wordStart">Start URL</label>
-          <input id="wordStart" type="text" placeholder="https://example.com/" />
-          <div class="help">Any http(s) URL. Crawl stays on this origin.</div>
-        </div>
-        <div class="field">
-          <label for="wordTerms">Words / phrases to search</label>
-          <textarea id="wordTerms"></textarea>
-          <div class="help">One word or phrase per line. Searches visible page copy and reports page/source/context matches.</div>
-        </div>
-        <details class="more-options">
-          <summary>Advanced options</summary>
-          <div class="more-options-body">
-            <div class="field">
-              <label for="wordMaxFindings">Max word search findings</label>
-              <input id="wordMaxFindings" type="number" min="25" max="5000" step="25" value="500" />
-            </div>
-            <div class="check-item">
-              <input type="checkbox" id="wordCaseSensitive" />
-              <div><strong>Case-sensitive search</strong></div>
-            </div>
-            <div class="check-item">
-              <input type="checkbox" id="wordWholeWord" checked />
-              <div><strong>Match whole words for single-word searches</strong></div>
-            </div>
-            <div class="check-item">
-              <input type="checkbox" id="wordMainContentOnly" checked />
-              <div><strong>Prefer main article/content text when available</strong></div>
-            </div>
-            <div class="check-item" style="margin-bottom:0;">
-              <input type="checkbox" id="wordIncludeMetaText" checked />
-              <div><strong>Include title, meta description, alt text, title text, and aria-labels</strong></div>
-            </div>
-          </div>
-        </details>
-        <div class="toolbar" style="margin-top:14px;">
-          <button id="wordScanBtn">Start word search</button>
-          <button id="wordStopBtn" class="secondary">Stop word search</button>
-          <button id="wordExportBtn" class="ghost">Download CSV</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="wordStatus" class="status">Ready</div>
-
-    <div class="section-title">Word search summary</div>
-    <div class="summary-grid">
-      <div class="stat"><div class="k">Status</div><div class="v" id="wordSumStatus">Ready</div></div>
-      <div class="stat"><div class="k">Duration</div><div class="v" id="wordSumDuration">0s</div></div>
-      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="wordSumPages">0</div></div>
-      <div class="stat"><div class="k">Queued</div><div class="v" id="wordSumQueued">0</div></div>
-      <div class="stat"><div class="k">Term checks</div><div class="v" id="wordSumChecked">0</div></div>
-      <div class="stat"><div class="k">Matches</div><div class="v" id="wordSumFindings">0</div></div>
-      <div class="stat"><div class="k">New vs last run</div><div class="v" id="wordSumNew">0</div></div>
-      <div class="stat"><div class="k">Skipped</div><div class="v" id="wordSumSkipped">0</div></div>
-      <div class="stat"><div class="k">Errors</div><div class="v" id="wordSumErrors">0</div></div>
-    </div>
-
-    <div class="section-title">Word search results</div>
-    <div id="wordResults" class="results"><div class="empty">No results yet.</div></div>
-
-    <details class="log-panel">
-      <summary class="log-head">Word search log</summary>
-      <div id="wordLog" class="log"></div>
     </details>
   </div>
 
