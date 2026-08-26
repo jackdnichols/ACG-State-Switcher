@@ -1486,7 +1486,7 @@
 
   function removeSpellNoise(root) {
     Array.prototype.slice.call(root.querySelectorAll(
-      "script,style,noscript,template,svg,canvas,iframe,code,pre,nav,footer,header,form,button,select,option,input,textarea,[hidden],[aria-hidden='true']"
+      "script,style,noscript,template,svg,canvas,iframe,code,pre,nav,footer,header,button,select,option,input,textarea,[hidden],[aria-hidden='true']"
     )).forEach(function (el) {
       if (el.parentNode) el.parentNode.removeChild(el);
     });
