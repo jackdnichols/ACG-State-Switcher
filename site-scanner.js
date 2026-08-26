@@ -1484,10 +1484,11 @@
     ) || doc.body;
   }
 
-  function removeSpellNoise(root) {
-    Array.prototype.slice.call(root.querySelectorAll(
-      "script,style,noscript,template,svg,canvas,iframe,code,pre,nav,footer,header,button,select,option,input,textarea,[hidden],[aria-hidden='true']"
-    )).forEach(function (el) {
+  function removeSpellNoise(root, options) {
+    var selector = "script,style,noscript,template,svg,canvas,iframe,code,pre,nav,footer,header,select,option,input,textarea,[hidden],[aria-hidden='true']";
+    if (!options || !options.includeButtonText) selector += ",button";
+
+    Array.prototype.slice.call(root.querySelectorAll(selector)).forEach(function (el) {
       if (el.parentNode) el.parentNode.removeChild(el);
     });
   }
@@ -1497,7 +1498,7 @@
     var rootSource = options.mainContentOnly ? findSpellContentRoot(doc) : doc.body;
     var clone = rootSource ? rootSource.cloneNode(true) : doc.cloneNode(true);
 
-    removeSpellNoise(clone);
+    removeSpellNoise(clone, options);
 
     if (clone && clone.textContent) {
       chunks.push({
@@ -1675,6 +1676,7 @@
         flagUnknown: byId("spellFlagUnknown").checked,
         includeMetaText: byId("spellIncludeMetaText").checked,
         mainContentOnly: byId("spellMainContentOnly").checked,
+        includeButtonText: byId("spellIncludeButtonText").checked,
         skipDataText: byId("spellSkipDataText").checked,
         minLength: getSpellMinLength(),
         maxFindings: getSpellMaxFindings()
@@ -1934,6 +1936,7 @@
         wholeWord: byId("wordWholeWord").checked,
         includeMetaText: byId("wordIncludeMetaText").checked,
         mainContentOnly: byId("wordMainContentOnly").checked,
+        includeButtonText: byId("wordIncludeButtonText").checked,
         maxFindings: getWordMaxFindings()
       };
 
@@ -1986,7 +1989,8 @@
           var doc = new DOMParser().parseFromString(page.text, "text/html");
           var chunks = collectSpellTextChunks(doc, url, {
             mainContentOnly: options.mainContentOnly,
-            includeMetaText: options.includeMetaText
+            includeMetaText: options.includeMetaText,
+            includeButtonText: options.includeButtonText
           });
           logTo(byId("wordLog"), "Text chunks found on page: " + chunks.length);
 
