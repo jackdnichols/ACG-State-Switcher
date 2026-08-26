@@ -1,4 +1,4 @@
-# ACG Utilities State Switcher v1.99
+# ACG Utilities State Switcher v1.100
 
 Developer utility for ACG/AAA web testing.
 
@@ -45,6 +45,10 @@ This extension is intended for **private/unlisted distribution to this org only*
 
 Not affiliated with AAA or its subsidiaries unless submitted by an authorized publisher.
 
+
+## v1.100
+- Fixed Word Search / Spell Check silently missing text inside `<form>` elements (e.g. a reCAPTCHA's "Enter Security Code" legend) — `removeSpellNoise()` was dropping the entire form instead of just its interactive controls. Forms are now scanned like any other content; `input`/`button`/`select`/`option`/`textarea` are still excluded so control values/placeholders don't leak into results.
+- Added an opt-in "Include button label text" checkbox to both Word Search and Spell Check (off by default, to avoid noisy "Submit"/"Search"-style matches) for the cases where button copy itself needs to be scanned.
 
 ## v1.99
 - Merged in the standalone Site-Scanner project's scanning engine, replacing the old domain-scoped Site Inspector: same lower-env/image/spell/word scanners as before, plus Broken Links, Mixed Content, and Page Audit, scan history, sitemap seeding, and presets — and no longer limited to acg.aaa.com/meemic.com/meemicfoundation.org.

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ACG Utilities State Switcher",
-  "version": "1.99",
+  "version": "1.100",
   "description": "ACG/Meemic dev tool: ZIP state switch, env links, A/B ideas, AEM badge, Site Scanner (links/SEO/console) for any site.",
   "permissions": [
     "storage",
