@@ -420,7 +420,7 @@
       <div class="top-bar">
         <div class="field" style="margin-bottom:0;">
           <label for="maxPages">Max pages</label>
-          <input id="maxPages" type="number" min="1" max="5000" step="1" value="500" />
+          <input id="maxPages" type="number" min="1" max="50000" step="1" value="500" />
         </div>
 
         <div class="global-summary">
@@ -434,6 +434,12 @@
         </div>
       </div>
       <div class="help" style="margin-top:14px;">Enter a Start URL on each tab below, or reopen this scanner from the toolbar icon while on the site you want to scan to prefill it automatically. "Run all" also starts the Console Errors scan on its selected target tab (see that tab), which will visibly navigate that tab through the site — the other scans run quietly in the background.</div>
+
+      <div class="field" style="margin-top:14px; margin-bottom:0;">
+        <label for="crawlExcludePaths">Skip URL paths</label>
+        <textarea id="crawlExcludePaths" placeholder="/connect/blogs/"></textarea>
+        <div class="help">One per line. Every scan skips crawling these paths and anything beneath them. <code>/connect/blogs</code> skips the directory and its index page; <code>/connect/blogs/</code> (trailing slash) still scans the index page but skips everything under it. Entries containing <code>://</code> match as a full-URL prefix. Edits apply immediately, even to scans already running.</div>
+      </div>
 
       <details class="more-options">
         <summary>Sitemap seeding, presets &amp; scan history</summary>

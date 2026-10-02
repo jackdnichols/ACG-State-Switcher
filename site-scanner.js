@@ -49,7 +49,7 @@
      ========================= */
 
   var DEFAULT_MAX_PAGES = 500;
-  var HARD_MAX_PAGES = 5000;
+  var HARD_MAX_PAGES = 50000;
   var CRAWL_DELAY_MS = 120;
   var IMAGE_TIMEOUT_MS = 12000;
   var SPELL_CONTEXT_CHARS = 48;
@@ -73,7 +73,13 @@
   var SITEMAP_MAX_URLS = HARD_MAX_PAGES;
   var HISTORY_STORAGE_PREFIX = "siteScannerHistory:";
 
-  var htmlPageCache = {};
+  // Shared across scanners so "Run all" fetches each page once. Bounded
+  // (oldest evicted first) so long crawls don't hold every page's HTML in
+  // memory; scans crawl in roughly the same order, so a recent window is
+  // enough for them to share fetches.
+  var HTML_PAGE_CACHE_MAX_ENTRIES = 500;
+  var LOG_MAX_LINES = 2000;
+  var htmlPageCache = new Map();
   var htmlPageCacheCount = 0;
 
   var lowerState = createScanState("lower");
@@ -434,6 +440,48 @@
     }
   }
 
+  // "Skip URL paths" box: one entry per line. A path entry (e.g.
+  // /connect/blogs) skips that path and everything beneath it; with a
+  // trailing slash (/connect/blogs/) only the pages beneath it are skipped.
+  // An entry containing "://" is matched as a full-URL prefix. Read live on
+  // every check so edits take effect on scans already running.
+  var crawlExcludeCache = { raw: null, entries: [] };
+
+  function getCrawlExcludeEntries() {
+    var el = byId("crawlExcludePaths");
+    var raw = el ? el.value : "";
+    if (raw === crawlExcludeCache.raw) return crawlExcludeCache.entries;
+
+    crawlExcludeCache.raw = raw;
+    crawlExcludeCache.entries = raw.split("\n").map(function (line) {
+      var value = line.trim().toLowerCase();
+      if (!value) return null;
+      if (value.indexOf("://") > -1) return { full: value };
+      if (value.charAt(0) !== "/") value = "/" + value;
+      return { path: value };
+    }).filter(Boolean);
+    return crawlExcludeCache.entries;
+  }
+
+  function isExcludedCrawlUrl(url) {
+    var entries = getCrawlExcludeEntries();
+    if (!entries.length) return false;
+
+    var lowerUrl = String(url).toLowerCase();
+    var pathname;
+    try {
+      pathname = new URL(url).pathname.toLowerCase();
+    } catch (e) {
+      return false;
+    }
+
+    return entries.some(function (entry) {
+      if (entry.full) return lowerUrl.indexOf(entry.full) === 0;
+      if (entry.path.slice(-1) === "/") return pathname.indexOf(entry.path) === 0;
+      return pathname === entry.path || pathname.indexOf(entry.path + "/") === 0;
+    });
+  }
+
   function isSameOrigin(url, origin) {
     try {
       return new URL(url).origin === origin;
@@ -495,7 +543,13 @@
   }
 
   function logTo(el, msg) {
-    el.textContent += msg + "\n";
+    // Keep only the most recent LOG_MAX_LINES lines; appending to an
+    // ever-growing textContent gets slow on long crawls.
+    var lines = el._logLines || (el._logLines = []);
+    if (!el.textContent) lines.length = 0;
+    lines.push(msg);
+    if (lines.length > LOG_MAX_LINES) lines.splice(0, lines.length - LOG_MAX_LINES);
+    el.textContent = lines.join("\n") + "\n";
     el.scrollTop = el.scrollHeight;
   }
 
@@ -634,7 +688,7 @@
         });
       } else {
         locs.forEach(function (loc) {
-          if (isSameOrigin(loc, origin) && isLikelyHtmlPage(loc) && !found[loc]) {
+          if (isSameOrigin(loc, origin) && isLikelyHtmlPage(loc) && !isExcludedCrawlUrl(loc) && !found[loc]) {
             found[loc] = true;
             pageUrls.push(loc);
           }
@@ -659,21 +713,20 @@
     is a browser policy this scanner cannot and should not try to bypass.
   */
   function fetchHtmlPage(url) {
-    if (htmlPageCache[url]) return htmlPageCache[url];
+    if (htmlPageCache.has(url)) return htmlPageCache.get(url);
 
     if (!isScannableUrl(url)) {
-      htmlPageCache[url] = Promise.resolve({
+      return Promise.resolve({
         ok: false, status: 0, contentType: "", text: "",
         reason: "Blocked: only http/https URLs can be scanned",
         requestedUrl: url, finalUrl: url, redirected: false
       });
-      return htmlPageCache[url];
     }
 
     htmlPageCacheCount++;
     updateGlobalSummary();
 
-    htmlPageCache[url] = fetch(url, { credentials: "include" }).then(function (res) {
+    var request = fetch(url, { credentials: "include" }).then(function (res) {
       var contentType = res.headers.get("content-type") || "";
       var finalUrl = normalize(res.url || url, url) || url;
       var redirected = !!(res.redirected || finalUrl !== url);
@@ -715,7 +768,11 @@
       };
     });
 
-    return htmlPageCache[url];
+    htmlPageCache.set(url, request);
+    if (htmlPageCache.size > HTML_PAGE_CACHE_MAX_ENTRIES) {
+      htmlPageCache.delete(htmlPageCache.keys().next().value);
+    }
+    return request;
   }
 
   function extractPageLinks(doc, pageUrl) {
@@ -878,6 +935,7 @@
         var url = queue.shift();
         var lowerUrlKey = canonicalizePageUrl(url);
         if (!url || visited[lowerUrlKey]) continue;
+        if (url !== firstUrl && isExcludedCrawlUrl(url)) continue;
 
         visited[lowerUrlKey] = true;
         lowerState.pagesScanned = Object.keys(visited).length;
@@ -910,7 +968,7 @@
 
           links.forEach(function (link) {
             var lowerLinkKey = canonicalizePageUrl(link);
-            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[lowerLinkKey] && !queued[lowerLinkKey]) {
+            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !isExcludedCrawlUrl(link) && !visited[lowerLinkKey] && !queued[lowerLinkKey]) {
               queue.push(link);
               queued[lowerLinkKey] = true;
             }
@@ -1221,6 +1279,7 @@
         var url = queue.shift();
         var imageUrlKey = canonicalizePageUrl(url);
         if (!url || visited[imageUrlKey]) continue;
+        if (url !== firstUrl && isExcludedCrawlUrl(url)) continue;
 
         visited[imageUrlKey] = true;
         imageState.pagesScanned = Object.keys(visited).length;
@@ -1248,7 +1307,7 @@
             logTo(logEl, "REDIRECT: " + url + " -> " + effectivePageUrl);
 
             var effectivePageUrlKey = canonicalizePageUrl(effectivePageUrl);
-            if (isSameOrigin(effectivePageUrl, origin) && isScannableUrl(effectivePageUrl) && isLikelyHtmlPage(effectivePageUrl) && !visited[effectivePageUrlKey] && !queued[effectivePageUrlKey]) {
+            if (isSameOrigin(effectivePageUrl, origin) && isScannableUrl(effectivePageUrl) && isLikelyHtmlPage(effectivePageUrl) && !isExcludedCrawlUrl(effectivePageUrl) && !visited[effectivePageUrlKey] && !queued[effectivePageUrlKey]) {
               queue.push(effectivePageUrl);
               queued[effectivePageUrlKey] = true;
               logTo(logEl, "Queued final redirected URL: " + effectivePageUrl);
@@ -1299,7 +1358,7 @@
             var links = extractPageLinks(doc, effectivePageUrl);
             links.forEach(function (link) {
               var imageLinkKey = canonicalizePageUrl(link);
-              if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[imageLinkKey] && !queued[imageLinkKey]) {
+              if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !isExcludedCrawlUrl(link) && !visited[imageLinkKey] && !queued[imageLinkKey]) {
                 queue.push(link);
                 queued[imageLinkKey] = true;
               }
@@ -1735,6 +1794,7 @@
         var url = queue.shift();
         var spellUrlKey = canonicalizePageUrl(url);
         if (!url || visited[spellUrlKey]) continue;
+        if (url !== firstUrl && isExcludedCrawlUrl(url)) continue;
 
         visited[spellUrlKey] = true;
         spellState.pagesScanned = Object.keys(visited).length;
@@ -1767,7 +1827,7 @@
           var links = extractPageLinks(doc, url);
           links.forEach(function (link) {
             var linkKey = canonicalizePageUrl(link);
-            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[linkKey] && !queued[linkKey]) {
+            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !isExcludedCrawlUrl(link) && !visited[linkKey] && !queued[linkKey]) {
               queue.push(link);
               queued[linkKey] = true;
             }
@@ -1991,6 +2051,7 @@
         var url = queue.shift();
         var urlKey = canonicalizePageUrl(url);
         if (!url || visited[urlKey]) continue;
+        if (url !== firstUrl && isExcludedCrawlUrl(url)) continue;
 
         visited[urlKey] = true;
         wordState.pagesScanned = Object.keys(visited).length;
@@ -2024,7 +2085,7 @@
 
           extractPageLinks(doc, url).forEach(function (link) {
             var linkKey = canonicalizePageUrl(link);
-            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[linkKey] && !queued[linkKey]) {
+            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !isExcludedCrawlUrl(link) && !visited[linkKey] && !queued[linkKey]) {
               queue.push(link);
               queued[linkKey] = true;
             }
@@ -2312,6 +2373,7 @@
         var url = queue.shift();
         var urlKey = canonicalizePageUrl(url);
         if (!url || visited[urlKey]) continue;
+        if (url !== firstUrl && isExcludedCrawlUrl(url)) continue;
 
         visited[urlKey] = true;
         urlSearchState.pagesScanned = Object.keys(visited).length;
@@ -2350,7 +2412,7 @@
 
           extractPageLinks(doc, url).forEach(function (link) {
             var linkKey = canonicalizePageUrl(link);
-            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[linkKey] && !queued[linkKey]) {
+            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !isExcludedCrawlUrl(link) && !visited[linkKey] && !queued[linkKey]) {
               queue.push(link);
               queued[linkKey] = true;
             }
@@ -2606,6 +2668,7 @@
         var url = queue.shift();
         var linkUrlKey = canonicalizePageUrl(url);
         if (!url || visited[linkUrlKey]) continue;
+        if (url !== firstUrl && isExcludedCrawlUrl(url)) continue;
 
         visited[linkUrlKey] = true;
         linkState.pagesScanned = Object.keys(visited).length;
@@ -2642,7 +2705,7 @@
           var crawlLinks = extractPageLinks(doc, url);
           crawlLinks.forEach(function (link) {
             var crawlLinkKey = canonicalizePageUrl(link);
-            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[crawlLinkKey] && !queued[crawlLinkKey]) {
+            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !isExcludedCrawlUrl(link) && !visited[crawlLinkKey] && !queued[crawlLinkKey]) {
               queue.push(link);
               queued[crawlLinkKey] = true;
             }
@@ -2809,6 +2872,7 @@
         var url = queue.shift();
         var mixedUrlKey = canonicalizePageUrl(url);
         if (!url || visited[mixedUrlKey]) continue;
+        if (url !== firstUrl && isExcludedCrawlUrl(url)) continue;
 
         visited[mixedUrlKey] = true;
         mixedState.pagesScanned = Object.keys(visited).length;
@@ -2841,7 +2905,7 @@
           var links = extractPageLinks(doc, url);
           links.forEach(function (link) {
             var mixedLinkKey = canonicalizePageUrl(link);
-            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[mixedLinkKey] && !queued[mixedLinkKey]) {
+            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !isExcludedCrawlUrl(link) && !visited[mixedLinkKey] && !queued[mixedLinkKey]) {
               queue.push(link);
               queued[mixedLinkKey] = true;
             }
@@ -3058,6 +3122,7 @@
         var url = queue.shift();
         var auditUrlKey = canonicalizePageUrl(url);
         if (!url || visited[auditUrlKey]) continue;
+        if (url !== firstUrl && isExcludedCrawlUrl(url)) continue;
 
         visited[auditUrlKey] = true;
         auditState.pagesScanned = Object.keys(visited).length;
@@ -3086,7 +3151,7 @@
           var links = extractPageLinks(doc, url);
           links.forEach(function (link) {
             var auditLinkKey = canonicalizePageUrl(link);
-            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[auditLinkKey] && !queued[auditLinkKey]) {
+            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !isExcludedCrawlUrl(link) && !visited[auditLinkKey] && !queued[auditLinkKey]) {
               queue.push(link);
               queued[auditLinkKey] = true;
             }
@@ -3146,6 +3211,7 @@
     return {
       maxPages: byId("maxPages").value,
       seedFromSitemap: byId("seedFromSitemap").checked,
+      crawlExcludePaths: byId("crawlExcludePaths").value,
       lowerPatterns: byId("lowerPatterns").value,
       imageIgnorePatterns: byId("imageIgnorePatterns").value,
       includeCssImages: byId("includeCssImages").checked,
@@ -3185,6 +3251,7 @@
 
     setVal("maxPages", config.maxPages);
     setChk("seedFromSitemap", config.seedFromSitemap);
+    setVal("crawlExcludePaths", config.crawlExcludePaths);
     setVal("lowerPatterns", config.lowerPatterns);
     setVal("imageIgnorePatterns", config.imageIgnorePatterns);
     setChk("includeCssImages", config.includeCssImages);
@@ -3766,6 +3833,7 @@
       var url = queue.shift();
       var urlKey = canonicalizePageUrl(url);
       if (!url || visited[urlKey]) continue;
+      if (url !== firstUrl && isExcludedCrawlUrl(url)) continue;
 
       visited[urlKey] = true;
       consoleState.pagesScanned = Object.keys(visited).length;
@@ -3795,7 +3863,7 @@
       var links = await extractLinksFromLiveTab(tabId, url);
       links.forEach(function (link) {
         var linkKey = canonicalizePageUrl(link);
-        if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[linkKey] && !queued[linkKey]) {
+        if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !isExcludedCrawlUrl(link) && !visited[linkKey] && !queued[linkKey]) {
           queue.push(link);
           queued[linkKey] = true;
         }
