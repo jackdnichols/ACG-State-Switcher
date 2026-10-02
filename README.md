@@ -1,4 +1,4 @@
-# ACG Utilities State Switcher v1.101
+# ACG Utilities State Switcher v1.102
 
 Developer utility for ACG/AAA web testing.
 
@@ -45,6 +45,11 @@ This extension is intended for **private/unlisted distribution to this org only*
 
 Not affiliated with AAA or its subsidiaries unless submitted by an authorized publisher.
 
+
+## v1.102
+- Added a "Skip URL paths" box to Site Scanner (under Max pages). One entry per line; every crawl-based scan, sitemap seeding included, skips those paths and everything beneath them. `/connect/blogs` skips the directory and its index page; `/connect/blogs/` (trailing slash) still scans the index page but skips everything under it; entries containing `://` match as a full-URL prefix. Read live, so edits apply to scans already running. Saved with presets.
+- Raised Site Scanner's hard max pages from 5,000 to 50,000.
+- Bounded Site Scanner's shared HTML page cache to the 500 most recent pages (it previously kept every fetched page's HTML for the whole session) and capped each scan log at its last 2,000 lines, so long crawls no longer exhaust memory or slow the tab.
 
 ## v1.101
 - Added a URL Search tab to Site Scanner: enter one URL (or URL fragment) per line and it crawls the site reporting every link and button that points at it — `<a>`/`<area>` hrefs, submit buttons (via `formaction` or their form's `action`), URLs in inline `onclick` handlers, and `data-href`/`data-url`/`data-link` attributes. Match modes: contains (default), exact (ignores #hash, tracking params, trailing slash), and starts-with. Wired into Run all/Stop all, presets, scan history, CSV and the all-results JSON export.
