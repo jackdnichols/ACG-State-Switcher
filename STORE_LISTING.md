@@ -103,10 +103,11 @@ bug).
 >    - Click the toolbar icon -> "Open Site Scanner" (or click the icon
 >      directly while on any http(s) page).
 >    - Enter any public URL (e.g. https://example.com) as the Start URL
->      on any of the seven scan tabs (Lower Env Links, Broken Links,
+>      on any of the eight scan tabs (Lower Env Links, Broken Links,
 >      Missing Images, Mixed Content, Spell Check, Page Audit, Word
->      Search) and click that tab's "Start" button, or click "Run all"
->      at the top to run all seven at once. Results populate live in
+>      Search, URL Search) and click that tab's "Start" button, or click
+>      "Run all" at the top to run all eight at once (Word Search and URL
+>      Search only run once you've entered terms/URLs). Results populate live in
 >      that tab.
 >    - Console Errors tab: pick any of your own open tabs from the
 >      "Target tab" dropdown, click "Start console scan". It will reload

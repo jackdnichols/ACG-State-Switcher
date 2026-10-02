@@ -410,7 +410,7 @@
 <div class="wrap">
   <div class="hero">
     <h1>Site Scanner</h1>
-    <p>Scanners you can point at any site: lower-environment link leaks, broken links, missing images, mixed content, spelling/typos, a basic SEO/accessibility page audit, free-text word search, and live console error capture with fix recommendations.</p>
+    <p>Scanners you can point at any site: lower-environment link leaks, broken links, missing images, mixed content, spelling/typos, a basic SEO/accessibility page audit, free-text word search, URL search across links and buttons, and live console error capture with fix recommendations.</p>
     <div class="scope-note">Works on any http(s) site. Each scan stays on the origin of its own Start URL.</div>
     <div class="note">Runs as its own extension tab, not injected into the page, so requests to the target site are cross-site fetches. Cookies marked SameSite=Lax/Strict on the target site (the default for most session cookies) will not be sent, so scans see the same content a logged-out visitor would even if you're signed in on another tab.</div>
   </div>
@@ -468,11 +468,12 @@
   </div>
 
   <div class="tabs">
+    <button id="tabWordBtn" class="tab-btn active">Word Search</button>
+    <button id="tabUrlBtn" class="tab-btn">URL Search</button>
     <button id="tabSpellBtn" class="tab-btn">Spell Check</button>
-    <button id="tabWordBtn" class="tab-btn">Word Search</button>
     <button id="tabImagesBtn" class="tab-btn">Missing Images</button>
-    <button id="tabLowerBtn" class="tab-btn active">Lower Env Links</button>
     <button id="tabLinksBtn" class="tab-btn">Broken Links</button>
+    <button id="tabLowerBtn" class="tab-btn">Lower Env Links</button>
     <button id="tabMixedBtn" class="tab-btn">Mixed Content</button>
     <button id="tabConsoleBtn" class="tab-btn">Console Errors</button>
     <button id="tabAuditBtn" class="tab-btn">Page Audit</button>
@@ -560,7 +561,7 @@
   </div>
 
   <!-- ============ Word Search ============ -->
-  <div id="wordPanel" class="tab-panel">
+  <div id="wordPanel" class="tab-panel active">
     <div class="card">
       <div class="card-body">
         <div class="field">
@@ -634,6 +635,80 @@
     </details>
   </div>
 
+  <!-- ============ URL Search ============ -->
+  <div id="urlPanel" class="tab-panel">
+    <div class="card">
+      <div class="card-body">
+        <div class="field">
+          <label for="urlStart">Start URL</label>
+          <input id="urlStart" type="text" placeholder="https://example.com/" />
+          <div class="help">Any http(s) URL. Crawl stays on this origin.</div>
+        </div>
+        <div class="field">
+          <label for="urlTerms">URLs to search for</label>
+          <textarea id="urlTerms"></textarea>
+          <div class="help">One URL (or URL fragment, e.g. <code>/contact</code> or <code>partner.com</code>) per line. Finds links and buttons on each page whose target matches. Matching is case-insensitive.</div>
+        </div>
+        <details class="more-options">
+          <summary>Advanced options</summary>
+          <div class="more-options-body">
+            <div class="grid-2">
+              <div class="field">
+                <label for="urlMatchMode">Match mode</label>
+                <select id="urlMatchMode">
+                  <option value="contains" selected>Target contains entered text</option>
+                  <option value="exact">Exact URL (ignores #hash, tracking params, trailing slash)</option>
+                  <option value="prefix">Target starts with entered URL</option>
+                </select>
+                <div class="help">Relative entries (e.g. <code>/contact</code>) are resolved against the Start URL for Exact and Starts-with modes.</div>
+              </div>
+              <div class="field">
+                <label for="urlMaxFindings">Max URL search findings</label>
+                <input id="urlMaxFindings" type="number" min="25" max="5000" step="25" value="500" />
+              </div>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="urlIncludeLinks" checked />
+              <div><strong>Search links</strong><div class="sub">&lt;a href&gt; and &lt;area href&gt;.</div></div>
+            </div>
+            <div class="check-item" style="margin-bottom:0;">
+              <input type="checkbox" id="urlIncludeButtons" checked />
+              <div><strong>Search buttons</strong><div class="sub">&lt;button&gt;/submit inputs (formaction or their form's action), URLs in onclick handlers, and data-href/data-url/data-link attributes.</div></div>
+            </div>
+          </div>
+        </details>
+        <div class="toolbar" style="margin-top:14px;">
+          <button id="urlScanBtn">Start URL search</button>
+          <button id="urlStopBtn" class="secondary">Stop URL search</button>
+          <button id="urlExportBtn" class="ghost">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="urlStatus" class="status">Ready</div>
+
+    <div class="section-title">URL search summary</div>
+    <div class="summary-grid">
+      <div class="stat"><div class="k">Status</div><div class="v" id="urlSumStatus">Ready</div></div>
+      <div class="stat"><div class="k">Duration</div><div class="v" id="urlSumDuration">0s</div></div>
+      <div class="stat"><div class="k">Pages scanned</div><div class="v" id="urlSumPages">0</div></div>
+      <div class="stat"><div class="k">Queued</div><div class="v" id="urlSumQueued">0</div></div>
+      <div class="stat"><div class="k">Links/buttons checked</div><div class="v" id="urlSumChecked">0</div></div>
+      <div class="stat"><div class="k">Matches</div><div class="v" id="urlSumFindings">0</div></div>
+      <div class="stat"><div class="k">New vs last run</div><div class="v" id="urlSumNew">0</div></div>
+      <div class="stat"><div class="k">Skipped</div><div class="v" id="urlSumSkipped">0</div></div>
+      <div class="stat"><div class="k">Errors</div><div class="v" id="urlSumErrors">0</div></div>
+    </div>
+
+    <div class="section-title">URL search results</div>
+    <div id="urlResults" class="results"><div class="empty">No results yet.</div></div>
+
+    <details class="log-panel">
+      <summary class="log-head">URL search log</summary>
+      <div id="urlLog" class="log"></div>
+    </details>
+  </div>
+
   <!-- ============ Missing Image Scanner ============ -->
   <div id="imagesPanel" class="tab-panel">
     <div class="card">
@@ -699,7 +774,7 @@
   </div>
 
   <!-- ============ Lower Environment Link Scanner ============ -->
-  <div id="lowerPanel" class="tab-panel active">
+  <div id="lowerPanel" class="tab-panel">
     <div class="card">
       <div class="card-body">
         <div class="field">

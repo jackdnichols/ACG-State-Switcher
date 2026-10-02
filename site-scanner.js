@@ -57,6 +57,7 @@
   var SPELL_YIELD_EVERY_WORDS = 200;
   var SPELL_DEFAULT_MAX_FINDINGS = 300;
   var WORD_DEFAULT_MAX_FINDINGS = 500;
+  var URL_SEARCH_DEFAULT_MAX_FINDINGS = 500;
   var CONSOLE_DEFAULT_MAX_FINDINGS = 300;
   var CONSOLE_SCAN_DEFAULT_MAX_PAGES = 20;
   var CONSOLE_SCAN_HARD_MAX_PAGES = 300;
@@ -79,6 +80,7 @@
   var imageState = createScanState("image");
   var spellState = createScanState("spell");
   var wordState = createScanState("word");
+  var urlSearchState = createScanState("url");
   var linkState = createScanState("link");
   var mixedState = createScanState("mixed");
   var auditState = createScanState("audit");
@@ -99,6 +101,10 @@
   var wordFindings = [];
   var wordFindingKeys = {};
   var wordHistorySet = {};
+
+  var urlSearchFindings = [];
+  var urlSearchFindingKeys = {};
+  var urlSearchHistorySet = {};
 
   var linkFindings = [];
   var linkFindingKeys = {};
@@ -236,6 +242,7 @@
     if (imageState.running) runningCount++;
     if (spellState.running) runningCount++;
     if (wordState.running) runningCount++;
+    if (urlSearchState.running) runningCount++;
     if (linkState.running) runningCount++;
     if (mixedState.running) runningCount++;
     if (auditState.running) runningCount++;
@@ -298,6 +305,19 @@
     updateGlobalSummary();
   }
 
+  function updateUrlSearchSummary() {
+    setText("urlSumStatus", urlSearchState.status);
+    setText("urlSumDuration", getDurationText(urlSearchState));
+    setText("urlSumPages", urlSearchState.pagesScanned + " / " + urlSearchState.maxPages);
+    setText("urlSumQueued", urlSearchState.queued);
+    setText("urlSumChecked", urlSearchState.checked);
+    setText("urlSumFindings", urlSearchState.findings);
+    setText("urlSumNew", urlSearchState.newCount);
+    setText("urlSumSkipped", urlSearchState.skipped);
+    setText("urlSumErrors", urlSearchState.errors);
+    updateGlobalSummary();
+  }
+
   function updateLinkSummary() {
     setText("linkSumStatus", linkState.status);
     setText("linkSumDuration", getDurationText(linkState));
@@ -342,6 +362,7 @@
     if (imageState.running) updateImageSummary();
     if (spellState.running) updateSpellSummary();
     if (wordState.running) updateWordSummary();
+    if (urlSearchState.running) updateUrlSearchSummary();
     if (linkState.running) updateLinkSummary();
     if (mixedState.running) updateMixedSummary();
     if (auditState.running) updateAuditSummary();
@@ -400,7 +421,7 @@
       var url = new URL(pageUrl);
       url.hash = "";
 
-      Array.prototype.slice.call(url.searchParams.keys()).forEach(function (key) {
+      Array.from(url.searchParams.keys()).forEach(function (key) {
         var lowerKey = key.toLowerCase();
         if (lowerKey.indexOf("utm_") === 0 || TRACKING_PARAMS[lowerKey]) {
           url.searchParams.delete(key);
@@ -460,7 +481,7 @@
   var TAB_PANEL_ID_OVERRIDES = { links: "link" };
 
   function setActiveTab(tabName) {
-    ["lower", "links", "images", "mixed", "spell", "audit", "word", "console"].forEach(function (name) {
+    ["lower", "links", "images", "mixed", "spell", "audit", "word", "url", "console"].forEach(function (name) {
       var btnId = "tab" + name.charAt(0).toUpperCase() + name.slice(1) + "Btn";
       var panelId = (TAB_PANEL_ID_OVERRIDES[name] || name) + "Panel";
       var active = name === tabName;
@@ -490,6 +511,7 @@
     byId("imageStart").value = url;
     byId("spellStart").value = url;
     byId("wordStart").value = url;
+    byId("urlStart").value = url;
     byId("linkStart").value = url;
     byId("mixedStart").value = url;
     byId("auditStart").value = url;
@@ -2036,6 +2058,332 @@
   }
 
   /* =========================
+     URL Search
+     ========================= */
+
+  function getUrlSearchTerms() {
+    var seen = {};
+    var terms = [];
+
+    String(byId("urlTerms").value || "").split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (term) {
+      var key = term.toLowerCase();
+      if (!seen[key]) { seen[key] = true; terms.push(term); }
+    });
+
+    return terms;
+  }
+
+  function getUrlSearchMaxFindings() {
+    var input = byId("urlMaxFindings");
+    var value = parseInt(input.value, 10);
+
+    if (isNaN(value) || value < 25) value = URL_SEARCH_DEFAULT_MAX_FINDINGS;
+    if (value > 5000) value = 5000;
+
+    input.value = String(value);
+    return value;
+  }
+
+  // Unlike normalize(), keeps the #hash and mailto:/tel: targets, since a
+  // tester may be searching for exactly those (e.g. "#apply" or "tel:800").
+  function resolveUrlSearchTarget(raw, base) {
+    var value = String(raw || "").trim();
+    if (!value || value === "#") return null;
+    try { return new URL(value, base).href; } catch (e) { return null; }
+  }
+
+  // Identity used by the "exact" match mode: same canonicalization as page
+  // dedup (no hash, no tracking params), plus no trailing slash on the path,
+  // so "/contact" and "/contact/" are treated as the same destination.
+  function canonicalUrlForUrlSearch(url) {
+    try {
+      var parsed = new URL(canonicalizePageUrl(url));
+      if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+      return parsed.href.toLowerCase();
+    } catch (e) {
+      return String(url || "").toLowerCase();
+    }
+  }
+
+  // Pre-computes each entered term once per scan into the form its match
+  // mode compares against, so per-element matching is just string checks.
+  function buildUrlSearchMatchers(terms, startUrl, mode) {
+    return terms.map(function (term) {
+      var resolved = resolveUrlSearchTarget(term, startUrl) || term;
+      if (mode === "exact") return { term: term, value: canonicalUrlForUrlSearch(resolved) };
+      if (mode === "prefix") return { term: term, value: resolved.toLowerCase() };
+      return { term: term, value: term.toLowerCase() };
+    });
+  }
+
+  function urlSearchTargetMatches(target, matcher, mode) {
+    if (mode === "exact") return canonicalUrlForUrlSearch(target) === matcher.value;
+    var lowerTarget = target.toLowerCase();
+    if (mode === "prefix") return lowerTarget.indexOf(matcher.value) === 0;
+    return lowerTarget.indexOf(matcher.value) > -1;
+  }
+
+  function getUrlSearchElementLabel(el) {
+    var text = el.getAttribute("aria-label") || el.textContent || el.getAttribute("value") ||
+      el.getAttribute("title") || el.getAttribute("alt") || "";
+    if (!text.trim()) {
+      var img = el.querySelector && el.querySelector("img[alt]");
+      if (img) text = img.getAttribute("alt") || "";
+    }
+    text = text.replace(/\s+/g, " ").trim();
+    return text.length > 120 ? text.slice(0, 117) + "..." : text;
+  }
+
+  // Pulls URL-looking string literals out of an inline handler like
+  // onclick="location.href='/apply'" or onclick="window.open('https://...')".
+  function extractUrlsFromScriptAttr(value) {
+    var urls = [];
+    var re = /(['"`])((?:https?:)?\/\/[^'"`\s]+|\/[^'"`\s]*|\.\.?\/[^'"`\s]*|(?:mailto|tel):[^'"`\s]+|[\w.-]+\.(?:html?|aspx?|php|jsp)(?:[?#][^'"`\s]*)?)\1/gi;
+    var match;
+    while ((match = re.exec(String(value || ""))) !== null) urls.push(match[2]);
+    return urls;
+  }
+
+  function collectUrlSearchCandidates(doc, pageUrl, options) {
+    var candidates = [];
+
+    function add(el, raw, kind, source) {
+      var target = resolveUrlSearchTarget(raw, pageUrl);
+      if (!target) return;
+      candidates.push({ target: target, kind: kind, source: source, label: getUrlSearchElementLabel(el) });
+    }
+
+    if (options.includeLinks) {
+      Array.prototype.slice.call(doc.querySelectorAll("a[href],area[href]")).forEach(function (el) {
+        add(el, el.getAttribute("href"), "link", el.tagName.toLowerCase() + "[href]");
+      });
+    }
+
+    if (options.includeButtons) {
+      Array.prototype.slice.call(doc.querySelectorAll(
+        "button,input[type='submit'],input[type='image'],input[type='button']"
+      )).forEach(function (el) {
+        if (el.hasAttribute("formaction")) {
+          add(el, el.getAttribute("formaction"), "button", "formaction");
+          return;
+        }
+
+        var type = (el.getAttribute("type") || (el.tagName === "BUTTON" ? "submit" : "")).toLowerCase();
+        if (type !== "submit" && type !== "image") return;
+
+        var form = el.form || el.closest("form");
+        if (form && form.getAttribute("action")) add(el, form.getAttribute("action"), "button", "form action");
+      });
+
+      Array.prototype.slice.call(doc.querySelectorAll("[onclick]")).forEach(function (el) {
+        extractUrlsFromScriptAttr(el.getAttribute("onclick")).forEach(function (raw) {
+          add(el, raw, "button", "onclick");
+        });
+      });
+
+      Array.prototype.slice.call(doc.querySelectorAll("[data-href],[data-url],[data-link]")).forEach(function (el) {
+        ["data-href", "data-url", "data-link"].forEach(function (attr) {
+          if (el.hasAttribute(attr)) add(el, el.getAttribute(attr), "button", attr);
+        });
+      });
+    }
+
+    return candidates;
+  }
+
+  function addUrlSearchResult(term, candidate, pageUrl) {
+    var canonicalPageUrl = canonicalizePageUrl(pageUrl);
+    var key = term.toLowerCase() + "|" + candidate.target + "|" + canonicalPageUrl + "|" + candidate.source + "|" + candidate.label;
+
+    if (urlSearchFindingKeys[key]) return;
+    urlSearchFindingKeys[key] = true;
+
+    var isNew = !urlSearchHistorySet[key];
+    if (isNew) urlSearchState.newCount++;
+
+    urlSearchFindings.push({
+      term: term, target: candidate.target, kind: candidate.kind, source: candidate.source,
+      label: candidate.label, pageUrl: pageUrl, canonicalPageUrl: canonicalPageUrl
+    });
+    urlSearchState.findings = urlSearchFindings.length;
+    updateUrlSearchSummary();
+
+    var resultsEl = byId("urlResults");
+    if (resultsEl.querySelector(".empty")) resultsEl.innerHTML = "";
+
+    var row = document.createElement("div");
+    row.className = "result";
+
+    var termEl = document.createElement("div");
+    termEl.className = "bad";
+    termEl.textContent = term;
+    if (isNew) termEl.appendChild(makeNewBadge());
+
+    var targetEl = document.createElement("div");
+    targetEl.className = "meta";
+    targetEl.textContent = candidate.kind + " target: " + candidate.target;
+
+    var labelEl = document.createElement("div");
+    labelEl.className = "source";
+    labelEl.textContent = "text: " + (candidate.label || "(no text)");
+
+    var sourceEl = document.createElement("div");
+    sourceEl.className = "source";
+    sourceEl.textContent = "source: " + candidate.source;
+
+    var pageEl = document.createElement("div");
+    pageEl.className = "page";
+    pageEl.textContent = "on: " + pageUrl;
+
+    row.appendChild(termEl);
+    row.appendChild(targetEl);
+    row.appendChild(labelEl);
+    row.appendChild(sourceEl);
+    row.appendChild(pageEl);
+    resultsEl.appendChild(row);
+  }
+
+  async function runUrlSearchScan() {
+    if (urlSearchState.running) { alert("The URL search scan is already running."); return; }
+
+    var start = byId("urlStart").value.trim();
+    var terms = getUrlSearchTerms();
+
+    if (!start) { alert("Enter a start URL."); return; }
+    if (!terms.length) { alert("Enter at least one URL to search for."); return; }
+
+    var startUrl;
+    try { startUrl = new URL(start); } catch (e) { alert("Invalid start URL."); return; }
+
+    if (!isScannableUrl(startUrl.href)) {
+      alert("Start URL must start with http:// or https://.");
+      return;
+    }
+
+    var options = {
+      mode: byId("urlMatchMode").value,
+      includeLinks: byId("urlIncludeLinks").checked,
+      includeButtons: byId("urlIncludeButtons").checked,
+      maxFindings: getUrlSearchMaxFindings()
+    };
+
+    if (!options.includeLinks && !options.includeButtons) { alert("Check at least one of Search links / Search buttons."); return; }
+
+    urlSearchFindings = [];
+    urlSearchFindingKeys = {};
+    byId("urlLog").textContent = "";
+    byId("urlResults").innerHTML = "<div class='empty'>No results yet.</div>";
+
+    var maxPages = getMaxPages();
+    resetScanState(urlSearchState, maxPages);
+    updateUrlSearchSummary();
+
+    var logEl = byId("urlLog");
+
+    try {
+      var matchers = buildUrlSearchMatchers(terms, startUrl.href, options.mode);
+      var origin = startUrl.origin;
+      urlSearchHistorySet = arrayToKeySet(await loadHistoryKeys("url", origin));
+
+      var firstUrl = normalize(startUrl.href, startUrl.href);
+      var queue = [firstUrl];
+      var visited = {};
+      var queued = {};
+      queued[canonicalizePageUrl(firstUrl)] = true;
+
+      logTo(logEl, "Starting URL search scan...");
+      logTo(logEl, "Crawling origin only: " + origin);
+      logTo(logEl, "Max pages: " + maxPages);
+      logTo(logEl, "Match mode: " + options.mode);
+      logTo(logEl, "URLs: " + terms.join(", "));
+
+      if (byId("seedFromSitemap").checked) {
+        logTo(logEl, "Fetching sitemap.xml for " + origin + "...");
+        var urlSitemapUrls = await fetchSitemapSameOriginUrls(origin);
+        var urlSitemapAdded = 0;
+        urlSitemapUrls.forEach(function (u) {
+          var uKey = canonicalizePageUrl(u);
+          if (!queued[uKey] && !visited[uKey]) { queue.push(u); queued[uKey] = true; urlSitemapAdded++; }
+        });
+        logTo(logEl, "Sitemap seeded " + urlSitemapAdded + " URL(s) into the queue.");
+      }
+
+      while (queue.length && !urlSearchState.stop) {
+        var url = queue.shift();
+        var urlKey = canonicalizePageUrl(url);
+        if (!url || visited[urlKey]) continue;
+
+        visited[urlKey] = true;
+        urlSearchState.pagesScanned = Object.keys(visited).length;
+        urlSearchState.queued = queue.length;
+        byId("urlStatus").textContent = "Scanning page " + urlSearchState.pagesScanned + " of max " + maxPages +
+          " | queued " + queue.length + " | matches " + urlSearchFindings.length;
+        updateUrlSearchSummary();
+        logTo(logEl, "Scanning page: " + url);
+
+        var page = await fetchHtmlPage(url);
+
+        if (!page.ok) {
+          urlSearchState.skipped++;
+          if (page.status === 0 || page.reason.indexOf("HTTP") === 0) urlSearchState.errors++;
+          logTo(logEl, "SKIP " + page.reason + ": " + url);
+          updateUrlSearchSummary();
+        } else {
+          var doc = new DOMParser().parseFromString(page.text, "text/html");
+          var candidates = collectUrlSearchCandidates(doc, url, options);
+          urlSearchState.checked += candidates.length;
+
+          for (var c = 0; c < candidates.length && !urlSearchState.stop; c++) {
+            for (var m = 0; m < matchers.length; m++) {
+              if (!urlSearchTargetMatches(candidates[c].target, matchers[m], options.mode)) continue;
+
+              if (options.maxFindings > 0 && urlSearchFindings.length >= options.maxFindings) {
+                urlSearchState.findingLimitHit = true;
+                urlSearchState.stop = true;
+                break;
+              }
+
+              logTo(logEl, "FOUND " + candidates[c].kind + ": " + candidates[c].target);
+              addUrlSearchResult(matchers[m].term, candidates[c], url);
+            }
+          }
+
+          extractPageLinks(doc, url).forEach(function (link) {
+            var linkKey = canonicalizePageUrl(link);
+            if (isSameOrigin(link, origin) && isScannableUrl(link) && isLikelyHtmlPage(link) && !visited[linkKey] && !queued[linkKey]) {
+              queue.push(link);
+              queued[linkKey] = true;
+            }
+          });
+
+          urlSearchState.queued = queue.length;
+          updateUrlSearchSummary();
+        }
+
+        if (Object.keys(visited).length >= maxPages) {
+          logTo(logEl, "Stopped at max page limit: " + maxPages);
+          break;
+        }
+
+        await sleep(CRAWL_DELAY_MS);
+      }
+
+      var finalStatus = urlSearchState.findingLimitHit ? "Finding limit hit" : (urlSearchState.stop ? "Stopped" : "Complete");
+      finishScanState(urlSearchState, finalStatus);
+      byId("urlStatus").textContent = finalStatus === "Complete" ? "Scan complete" : finalStatus;
+      logTo(logEl, "Done. URL search matches: " + urlSearchFindings.length + " (" + urlSearchState.newCount + " new since last run)");
+      if (isFinalScanStatus(finalStatus)) saveHistoryKeys("url", origin, Object.keys(urlSearchFindingKeys));
+      updateUrlSearchSummary();
+    } catch (e) {
+      urlSearchState.errors++;
+      finishScanState(urlSearchState, "Error");
+      byId("urlStatus").textContent = "Error";
+      logTo(logEl, "FATAL ERROR: " + (e && e.message ? e.message : e));
+      updateUrlSearchSummary();
+    }
+  }
+
+  /* =========================
      Broken Link Scan
      ========================= */
 
@@ -2820,7 +3168,12 @@
       wordCaseSensitive: byId("wordCaseSensitive").checked,
       wordWholeWord: byId("wordWholeWord").checked,
       wordMainContentOnly: byId("wordMainContentOnly").checked,
-      wordIncludeMetaText: byId("wordIncludeMetaText").checked
+      wordIncludeMetaText: byId("wordIncludeMetaText").checked,
+      urlTerms: byId("urlTerms").value,
+      urlMaxFindings: byId("urlMaxFindings").value,
+      urlMatchMode: byId("urlMatchMode").value,
+      urlIncludeLinks: byId("urlIncludeLinks").checked,
+      urlIncludeButtons: byId("urlIncludeButtons").checked
     };
   }
 
@@ -2855,6 +3208,11 @@
     setChk("wordWholeWord", config.wordWholeWord);
     setChk("wordMainContentOnly", config.wordMainContentOnly);
     setChk("wordIncludeMetaText", config.wordIncludeMetaText);
+    setVal("urlTerms", config.urlTerms);
+    setVal("urlMaxFindings", config.urlMaxFindings);
+    setVal("urlMatchMode", config.urlMatchMode);
+    setChk("urlIncludeLinks", config.urlIncludeLinks);
+    setChk("urlIncludeButtons", config.urlIncludeButtons);
   }
 
   function presetsStorageKey(origin) {
@@ -3497,12 +3855,14 @@
   byId("tabSpellBtn").onclick = function () { setActiveTab("spell"); };
   byId("tabAuditBtn").onclick = function () { setActiveTab("audit"); };
   byId("tabWordBtn").onclick = function () { setActiveTab("word"); };
+  byId("tabUrlBtn").onclick = function () { setActiveTab("url"); };
   byId("tabConsoleBtn").onclick = function () { setActiveTab("console"); refreshConsoleTabList(); };
 
   byId("lowerScanBtn").onclick = function () { runLowerEnvironmentScan(); };
   byId("imageScanBtn").onclick = function () { runMissingImageScan(); };
   byId("spellScanBtn").onclick = function () { runSpellCheckScan(); };
   byId("wordScanBtn").onclick = function () { runWordSearchScan(); };
+  byId("urlScanBtn").onclick = function () { runUrlSearchScan(); };
   byId("linkScanBtn").onclick = function () { runBrokenLinksScan(); };
   byId("mixedScanBtn").onclick = function () { runMixedContentScan(); };
   byId("auditScanBtn").onclick = function () { runPageAuditScan(); };
@@ -3530,6 +3890,15 @@
       started.push("word search");
     } else if (!wordState.running) {
       byId("wordStatus").textContent = "Skipped by Run All: no search terms entered.";
+      nothingElseToStart = false;
+    }
+
+    // URL Search likewise has no default URL list.
+    if (!urlSearchState.running && getUrlSearchTerms().length) {
+      runUrlSearchScan();
+      started.push("url search");
+    } else if (!urlSearchState.running) {
+      byId("urlStatus").textContent = "Skipped by Run All: no URLs entered.";
       nothingElseToStart = false;
     }
 
@@ -3583,6 +3952,14 @@
     updateWordSummary();
   };
 
+  byId("urlStopBtn").onclick = function () {
+    if (!urlSearchState.running) { byId("urlStatus").textContent = "No active URL search scan."; return; }
+    urlSearchState.stop = true;
+    urlSearchState.status = "Stopping";
+    byId("urlStatus").textContent = "Stopping URL search scan...";
+    updateUrlSearchSummary();
+  };
+
   byId("linkStopBtn").onclick = function () {
     if (!linkState.running) { byId("linkStatus").textContent = "No active link scan."; return; }
     linkState.stop = true;
@@ -3630,6 +4007,11 @@
       byId("wordStatus").textContent = "Stopping word search scan...";
       stoppedAny = true;
     }
+    if (urlSearchState.running) {
+      urlSearchState.stop = true; urlSearchState.status = "Stopping";
+      byId("urlStatus").textContent = "Stopping URL search scan...";
+      stoppedAny = true;
+    }
     if (linkState.running) {
       linkState.stop = true; linkState.status = "Stopping";
       byId("linkStatus").textContent = "Stopping link scan...";
@@ -3657,6 +4039,7 @@
     updateImageSummary();
     updateSpellSummary();
     updateWordSummary();
+    updateUrlSearchSummary();
     updateLinkSummary();
     updateMixedSummary();
     updateAuditSummary();
@@ -3708,6 +4091,18 @@
     );
   };
 
+  byId("urlExportBtn").onclick = function () {
+    if (!urlSearchFindings.length) { alert("No URL search results to export."); return; }
+
+    downloadCsv(
+      "url-search-scan.csv",
+      ["Search URL", "Matched Target", "Element", "Element Text", "Source", "Found On Page", "Canonical Page"],
+      urlSearchFindings.map(function (f) {
+        return [f.term, f.target, f.kind, f.label, f.source, f.pageUrl, f.canonicalPageUrl || f.pageUrl];
+      })
+    );
+  };
+
   byId("linkExportBtn").onclick = function () {
     if (!linkFindings.length) { alert("No broken link results to export."); return; }
 
@@ -3740,7 +4135,7 @@
 
   byId("exportAllBtn").onclick = function () {
     var totalFindings = lowerFindings.length + imageFindings.length + spellFindings.length +
-      wordFindings.length + linkFindings.length + mixedFindings.length + auditFindings.length +
+      wordFindings.length + urlSearchFindings.length + linkFindings.length + mixedFindings.length + auditFindings.length +
       consoleFindings.length;
 
     if (!totalFindings) { alert("No results to export yet from any scan."); return; }
@@ -3752,6 +4147,7 @@
         missingImages: { startUrl: byId("imageStart").value, findings: imageFindings },
         spellCheck: { startUrl: byId("spellStart").value, findings: spellFindings },
         wordSearch: { startUrl: byId("wordStart").value, terms: getWordTerms(), findings: wordFindings },
+        urlSearch: { startUrl: byId("urlStart").value, urls: getUrlSearchTerms(), findings: urlSearchFindings },
         brokenLinks: { startUrl: byId("linkStart").value, findings: linkFindings },
         mixedContent: { startUrl: byId("mixedStart").value, findings: mixedFindings },
         pageAudit: { startUrl: byId("auditStart").value, findings: auditFindings },
@@ -3764,7 +4160,7 @@
     var origin = getOriginFromStartField("lowerStart");
     if (!origin) { alert("Enter a valid Start URL on the Lower Env Links tab first."); return; }
 
-    var scanTypes = ["lower", "image", "spell", "word", "link", "mixed", "audit"];
+    var scanTypes = ["lower", "image", "spell", "word", "url", "link", "mixed", "audit"];
     var keysToRemove = scanTypes.map(function (type) { return historyStorageKey(type, origin); });
 
     try {
@@ -3864,12 +4260,13 @@
   byId("maxPages").value = String(DEFAULT_MAX_PAGES);
   byId("spellMaxFindings").value = String(SPELL_DEFAULT_MAX_FINDINGS);
   byId("wordMaxFindings").value = String(WORD_DEFAULT_MAX_FINDINGS);
+  byId("urlMaxFindings").value = String(URL_SEARCH_DEFAULT_MAX_FINDINGS);
   byId("consoleMaxFindings").value = String(CONSOLE_DEFAULT_MAX_FINDINGS);
   byId("consoleMaxPages").value = String(CONSOLE_SCAN_DEFAULT_MAX_PAGES);
   byId("consoleSecondsPerPage").value = String(CONSOLE_SCAN_DEFAULT_SECONDS_PER_PAGE);
 
-  // background.js passes ?start=<origin> when this tab was opened from the
-  // toolbar icon on an http(s) page, so the scanner defaults to that domain.
+  // popup.js passes ?start=<page url> when this tab was opened from the
+  // popup on an http(s) page, so the scanner defaults to that page.
   // Still re-validated here (not just trusted from the caller) since this is
   // the same protocol check fetchHtmlPage() uses.
   setAllStartUrls(getInitialStartUrl());
@@ -3882,6 +4279,7 @@
   byId("imageStatus").textContent = "Ready";
   byId("spellStatus").textContent = "Ready";
   byId("wordStatus").textContent = "Ready";
+  byId("urlStatus").textContent = "Ready";
   byId("linkStatus").textContent = "Ready";
   byId("mixedStatus").textContent = "Ready";
   byId("auditStatus").textContent = "Ready";
@@ -3890,6 +4288,7 @@
   logTo(byId("imageLog"), "Missing image scanner ready. Redirected page URLs are skipped by default.");
   logTo(byId("spellLog"), "Spell checker ready.");
   logTo(byId("wordLog"), "Word search ready. Add one word or phrase per line.");
+  logTo(byId("urlLog"), "URL search ready. Add one URL per line.");
   logTo(byId("linkLog"), "Broken link scanner ready.");
   logTo(byId("mixedLog"), "Mixed content scanner ready.");
   logTo(byId("auditLog"), "Page audit ready.");
@@ -3901,6 +4300,7 @@
   updateImageSummary();
   updateSpellSummary();
   updateWordSummary();
+  updateUrlSearchSummary();
   updateLinkSummary();
   updateMixedSummary();
   updateAuditSummary();
