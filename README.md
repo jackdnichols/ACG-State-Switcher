@@ -1,4 +1,4 @@
-# ACG Utilities State Switcher v1.100
+# ACG Utilities State Switcher v1.101
 
 Developer utility for ACG/AAA web testing.
 
@@ -8,7 +8,7 @@ Developer utility for ACG/AAA web testing.
 - Opens quick links for ACG, Meemic, Meemic Foundation, and AEM Author environments.
 - Generates local, template-based Adobe Target/A/B test ideas from the active tab, with auto-detected page type and priority ranking.
 - Shows an optional environment badge on AEM Authoring pages (the AEM Author hosts listed under Store review notes below) so it's obvious at a glance which author environment a tab is on.
-- Site Scanner: point it at any http(s) site (not just ACG/Meemic) to run lower-environment link leak, broken link, missing image, mixed content, spelling/typo, basic SEO/accessibility page audit, and free-text word search scans, plus live Console Error Capture — attach to an open tab and get pattern-matched fix recommendations for uncaught exceptions, unhandled promise rejections, and console.error/console.warn calls as they happen. Opens as its own tab so long scans survive the popup closing. Crawl-based scans run as an extension page rather than injected into the target site, so they don't carry the target site's SameSite=Lax/Strict session cookies (a browser-level restriction, not a setting) — those scans see what a logged-out visitor sees. Console Error Capture is different: it injects directly into the tab you point it at, so it sees that tab's real console output.
+- Site Scanner: point it at any http(s) site (not just ACG/Meemic) to run lower-environment link leak, broken link, missing image, mixed content, spelling/typo, basic SEO/accessibility page audit, free-text word search, and URL search (find links/buttons pointing at given URLs) scans, plus live Console Error Capture — attach to an open tab and get pattern-matched fix recommendations for uncaught exceptions, unhandled promise rejections, and console.error/console.warn calls as they happen. Opens as its own tab so long scans survive the popup closing. Crawl-based scans run as an extension page rather than injected into the target site, so they don't carry the target site's SameSite=Lax/Strict session cookies (a browser-level restriction, not a setting) — those scans see what a logged-out visitor sees. Console Error Capture is different: it injects directly into the tab you point it at, so it sees that tab's real console output.
 
 ## Privacy
 
@@ -45,6 +45,12 @@ This extension is intended for **private/unlisted distribution to this org only*
 
 Not affiliated with AAA or its subsidiaries unless submitted by an authorized publisher.
 
+
+## v1.101
+- Added a URL Search tab to Site Scanner: enter one URL (or URL fragment) per line and it crawls the site reporting every link and button that points at it — `<a>`/`<area>` hrefs, submit buttons (via `formaction` or their form's `action`), URLs in inline `onclick` handlers, and `data-href`/`data-url`/`data-link` attributes. Match modes: contains (default), exact (ignores #hash, tracking params, trailing slash), and starts-with. Wired into Run all/Stop all, presets, scan history, CSV and the all-results JSON export.
+- Reordered Site Scanner tabs to Word Search, URL Search, Spell Check, Missing Images, Broken Links, Lower Env Links, Mixed Content, Console Errors, Page Audit; the scanner now opens on Word Search.
+- Site Scanner's Start URL now defaults to the full URL of the page you opened it from (minus any `#hash`) instead of just that site's homepage. Crawls still cover the whole origin, starting from that page.
+- Fixed `canonicalizePageUrl()` never actually stripping tracking params (`utm_*`, `gclid`, etc.): it iterated `searchParams.keys()` via `Array.prototype.slice.call()`, which returns `[]` for an iterator. The v1.99 tracking-param dedup fix now really takes effect across all crawl-based scanners.
 
 ## v1.100
 - Fixed Word Search / Spell Check silently missing text inside `<form>` elements (e.g. a reCAPTCHA's "Enter Security Code" legend) — `removeSpellNoise()` was dropping the entire form instead of just its interactive controls. Forms are now scanned like any other content; `input`/`button`/`select`/`option`/`textarea` are still excluded so control values/placeholders don't leak into results.
