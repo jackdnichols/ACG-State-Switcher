@@ -3647,16 +3647,19 @@ document.getElementById('envRow')?.addEventListener('click',(e)=>{const a=e.targ
 document.querySelectorAll('[data-company]').forEach(link=>{link.addEventListener('click',(e)=>{e.preventDefault();if(!currentEnv||link.classList.contains('disabled'))return;const company=link.getAttribute('data-company');const target=urls?.[company]?.[currentEnv];if(target)chrome.tabs.create({url:target});});});
 document.getElementById('authorLink')?.addEventListener('click',(e)=>{e.preventDefault();if(!currentEnv||e.currentTarget.classList.contains('disabled'))return;const target=authorUrls[currentEnv];if(target)chrome.tabs.create({url:target});});
 document.getElementById('openSiteInspector')?.addEventListener('click', async () => {
-  // Prefill Site Scanner's Start URL with the origin of the tab it was
-  // opened from — Site Scanner isn't domain-scoped, so this works for
-  // whatever site is active, not just acg.aaa.com/meemic.com.
+  // Prefill Site Scanner's Start URL with the page it was opened from (minus
+  // any #hash) — Site Scanner isn't domain-scoped, so this works for
+  // whatever site is active, not just acg.aaa.com/meemic.com. Crawls still
+  // cover the whole origin; they just start from this page.
   let startUrl = "";
   let activeTabId = null;
   try {
     const tab = await getActiveTab();
     activeTabId = tab?.id ?? null;
     if (tab?.url && /^https?:\/\//i.test(tab.url)) {
-      startUrl = new URL(tab.url).origin + "/";
+      const pageUrl = new URL(tab.url);
+      pageUrl.hash = "";
+      startUrl = pageUrl.href;
     }
   } catch { /* fall back to Site Scanner's own default */ }
 
